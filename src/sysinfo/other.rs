@@ -33,7 +33,7 @@ pub fn other_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Colore
             } else if env::var("KOMOREBI_CONFIG_HOME").is_ok() {
                 "Komorebi".to_string()
             } else {
-                "Explorer.exe (glitch edition)".to_string()
+                "Explorer.exe".to_string()
             }
         } else if cfg!(target_os = "macos") {
             if env::var("YABAI_SOCKET").is_ok() {
@@ -45,7 +45,9 @@ pub fn other_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Colore
             }
         } else {
             // Linux / FreeBSD / OpenBSD
-            if env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
+            if env::var("NIRI_SOCKET").is_ok() {
+                "Niri".to_string()
+            } else if env::var("HYPRLAND_INSTANCE_SIGNATURE").is_ok() {
                 "Hyprland".to_string()
             } else if env::var("I3SOCK").is_ok() {
                 "i3".to_string()
@@ -63,7 +65,9 @@ pub fn other_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Colore
                     .unwrap_or_default()
                     .to_lowercase();
 
-                if desktop.contains("kde") || env::var("KDE_FULL_SESSION").is_ok() {
+                if desktop.contains("niri") {
+                    "niri".to_string()
+                } else if desktop.contains("kde") || env::var("KDE_FULL_SESSION").is_ok() {
                     "KWin".to_string()
                 } else if desktop.contains("gnome") {
                     "Mutter".to_string()
@@ -81,7 +85,22 @@ pub fn other_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Colore
             }
         };
 
-        let _ = writeln!(buf, "{}: {}", c("WM"), wm);
+        // Protocol (Wayland / X11 / tty)
+        let wm_display = if let Ok(session_type) = env::var("XDG_SESSION_TYPE") {
+            // Register: "wayland" -> "Wayland", "x11" -> "X11"
+            let session_lower = session_type.to_lowercase();
+            let protocol = match session_lower.as_str() {
+                "wayland" => "Wayland",
+                "x11" => "X11",
+                "tty" => "TTY",
+                other => other,
+            };
+            format!("{} ({})", wm, protocol)
+        } else {
+            wm
+        };
+
+        let _ = writeln!(buf, "{}: {}", c("WM"), wm_display);
     }
 
     wm_check(buf, c);
@@ -162,7 +181,12 @@ pub fn other_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Colore
     }
 
     fn sysprint(buf: &mut String, c: fn(&str) -> ColoredString) {
-        let _ = writeln!(buf, "{}: SysPrint v{}", c("Fetch"), env!("CARGO_PKG_VERSION"));
+        let _ = writeln!(
+            buf,
+            "{}: SysPrint v{}",
+            c("Fetch"),
+            env!("CARGO_PKG_VERSION")
+        );
     }
 
     // give link functions battery for variables lines

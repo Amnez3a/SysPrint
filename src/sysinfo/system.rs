@@ -36,6 +36,7 @@ pub fn system_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Color
     }
 
     os_version(buf, c);
+    check_kernel(buf, c);
 
     // OS_version
     fn os_version(buf: &mut String, c: fn(&str) -> ColoredString) {
@@ -58,6 +59,12 @@ pub fn system_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Color
             c("Host"),
             System::host_name().unwrap_or_default()
         );
+    }
+
+    fn check_kernel(buf: &mut String, c: fn(&str) -> ColoredString) {
+        let kernel = System::kernel_version().unwrap_or_else(|| "Unknown".to_string());
+
+        let _ = writeln!(buf, "{}: {}", c("Kernel"), kernel);
     }
 
     pub fn user_info(buf: &mut String, c: fn(&str) -> ColoredString) {
