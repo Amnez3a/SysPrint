@@ -17,7 +17,7 @@ Mint <img width="1920" height="1080" alt="image" src="https://github.com/user-at
 Arch (PC) <img width="954" height="1037" alt="изображение" src="https://github.com/user-attachments/assets/33568879-8d47-4d50-a828-511879f0280d" />
 Arch (LapTop) <img width="1142" height="801" alt="image" src="https://github.com/user-attachments/assets/b7e8165b-32a3-460b-8bb1-4bdfacf3f765" />
 Artix <img width="1254" height="759" alt="image" src="https://github.com/user-attachments/assets/1ce05a92-367c-4d50-a314-662a2cc913df" />
-NixOS <img width="1169" height="745" alt="изображение" src="https://github.com/user-attachments/assets/2df9640f-5df4-43fc-b378-dad14973d594" />
+NixOS  <img width="1201" height="766" alt="изображение" src="https://github.com/user-attachments/assets/a37252bb-5167-48c0-a14a-fe7d790f050a" />
 
 > 🐧 **Supported Logos:** Alpine, Android, MacOS, Arch, Artix, Astra Linux, EndeavourOS, CachyOS, Debian, Fedora, FreeBSD,NetBSD, OpenBSD, OpenSUSE,Gentoo, Kali Linux, Manjaro, Linux Mint, NixOS, Pop!_OS, Ubuntu. Void Linux, Zorin OS, and Windows. More coming soon!  
 > *If your distro isn't explicitly supported yet, SysPrint will fall back to the standard GNU/Linux penguin Tux logo.*
