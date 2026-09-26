@@ -683,7 +683,7 @@ dependencies = [
 
 [[package]]
 name = "sysprint"
-version = "3.9.3"
+version = "3.9.4"
 dependencies = [
  "chrono",
  "clap",

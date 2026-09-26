@@ -194,94 +194,126 @@ pub fn other_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Colore
 
     // Functions battery
     fn battery(buf: &mut String, c: fn(&str) -> ColoredString) {
-        let mut battery = "N/A (Desktop)".to_string();
+        let mut battery_str = String::new();
 
-        // Linux battery
+        // --- Linux ---
         #[cfg(target_os = "linux")]
         {
-            if let (Ok(cap), Ok(stat)) = (
-                fs::read_to_string("/sys/class/power_supply/BAT0/capacity"),
-                fs::read_to_string("/sys/class/power_supply/BAT0/status"),
-            ) {
-                battery = format!("{}% [{}]", cap.trim(), stat.trim());
-            } else if let (Ok(cap), Ok(stat)) = (
-                fs::read_to_string("/sys/class/power_supply/BAT1/capacity"),
-                fs::read_to_string("/sys/class/power_supply/BAT1/status"),
-            ) {
-                battery = format!("{}% [{}]", cap.trim(), stat.trim());
-            }
-        }
+            let mut found = false;
+            if let Ok(entries) = fs::read_dir("/sys/class/power_supply") {
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if name.starts_with("BAT") {
+                        let path = entry.path();
+                        let cap = fs::read_to_string(path.join("capacity")).unwrap_or_default();
+                        let stat = fs::read_to_string(path.join("status")).unwrap_or_default();
 
-        // FreeBSD battery
-        #[cfg(target_os = "freebsd")]
-        {
-            use std::process::Command;
-            let output = Command::new("sysctl")
-                .arg("-n")
-                .arg("hw.acpi.battery.life")
-                .output();
-
-            if let Ok(out) = output {
-                let cap = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if !cap.is_empty() {
-                    battery = format!("{}%", cap);
-                }
-            }
-        }
-        // OpenBSD battery
-        #[cfg(target_os = "openbsd")]
-        {
-            use std::process::Command;
-            // apm -l
-            let output = Command::new("apm").arg("-l").output();
-
-            if let Ok(out) = output {
-                let cap = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                // 255 в apm означает "батарея не найдена / ПК от сети"
-                if !cap.is_empty() && cap != "255" {
-                    battery = format!("{}%", cap);
-                }
-            }
-        }
-        // NetBSD battery
-        #[cfg(target_os = "netbsd")]
-        {
-            use std::process::Command;
-            let output = Command::new("envstat").args(["-s", "bat0:charge"]).output();
-
-            if let Ok(out) = output {
-                let text = String::from_utf8_lossy(&out.stdout);
-                if let Some(line) = text.lines().find(|l| l.contains("%")) {
-                    if let Some(val) = line.split('(').next() {
-                        let cleaned = val.replace("charge:", "").replace("%", "");
-                        let trimmed = cleaned.trim();
-                        if !trimmed.is_empty() {
-                            battery = format!("{}%", trimmed);
+                        if !cap.trim().is_empty() {
+                            let status_str = if stat.trim().is_empty() {
+                                "".to_string()
+                            } else {
+                                format!(" [{}]", stat.trim())
+                            };
+                            battery_str = format!("{}%{}", cap.trim(), status_str);
+                            found = true;
+                            break;
                         }
                     }
                 }
             }
+            if !found {
+                return;
+            }
         }
-        // Windows battery
+
+        // --- FreeBSD ---
+        #[cfg(target_os = "freebsd")]
+        {
+            use std::process::Command;
+            if let Ok(out) = Command::new("sysctl")
+                .args(["-n", "hw.acpi.battery.life"])
+                .output()
+            {
+                let cap = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !cap.is_empty() && cap != "-1" {
+                    battery_str = format!("{}%", cap);
+                } else {
+                    return;
+                }
+            } else {
+                return;
+            }
+        }
+
+        // --- OpenBSD ---
+        #[cfg(target_os = "openbsd")]
+        {
+            use std::process::Command;
+            if let Ok(out) = Command::new("apm").arg("-l").output() {
+                let cap = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !cap.is_empty() && cap != "255" {
+                    battery_str = format!("{}%", cap);
+                } else {
+                    return;
+                }
+            } else {
+                return;
+            }
+        }
+
+        // --- NetBSD ---
+        #[cfg(target_os = "netbsd")]
+        {
+            use std::process::Command;
+            if let Ok(out) = Command::new("envstat").args(["-s", "bat0:charge"]).output() {
+                let text = String::from_utf8_lossy(&out.stdout);
+                if let Some(line) = text.lines().find(|l| l.contains('%')) {
+                    if let Some(val) = line.split('(').next() {
+                        let cleaned = val.replace("charge:", "").replace('%', "");
+                        let trimmed = cleaned.trim();
+                        if !trimmed.is_empty() {
+                            battery_str = format!("{}%", trimmed);
+                        } else {
+                            return;
+                        }
+                    } else {
+                        return;
+                    }
+                } else {
+                    return;
+                }
+            } else {
+                return;
+            }
+        }
+
+        // --- Windows ---
         #[cfg(windows)]
         {
             use std::process::Command;
-            let output = Command::new("wmic")
+            if let Ok(out) = Command::new("wmic")
                 .args(["path", "Win32_Battery", "get", "EstimatedChargeRemaining"])
-                .output();
-
-            if let Ok(out) = output {
+                .output()
+            {
                 let text = String::from_utf8_lossy(&out.stdout);
                 if let Some(cap) = text.lines().nth(1) {
                     let trimmed = cap.trim();
                     if !trimmed.is_empty() {
-                        battery = format!("{}%", trimmed);
+                        battery_str = format!("{}%", trimmed);
+                    } else {
+                        return;
                     }
+                } else {
+                    return;
                 }
+            } else {
+                return;
             }
         }
 
-        let _ = writeln!(buf, "{}: {}", c("Battery"), battery);
+        if !battery_str.is_empty() {
+            let _ = writeln!(buf, "{}: {}", c("Battery"), battery_str);
+        }
     }
     system_time(buf, c);
 }
