@@ -14,7 +14,7 @@ A fast, lightweight, and customizable system information fetch tool written in R
 Windows <img width="972" height="494" alt="изображение" src="https://github.com/user-attachments/assets/b266bc19-46ad-45bc-b08b-61df368fc4f8" />
 Debian <img width="1005" height="570" alt="изображение" src="https://github.com/user-attachments/assets/95c5627f-4b99-4a92-9fbd-28b8b025d149" />
 Mint <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/f748baf5-4be8-4286-b759-280d0ad794e5" />
-Arch <img width="1148" height="732" alt="изображение" src="https://github.com/user-attachments/assets/90624b1c-f2a7-4bfd-bde3-de87be940728" />
+Arch (PC) <img width="954" height="1037" alt="изображение" src="https://github.com/user-attachments/assets/33568879-8d47-4d50-a828-511879f0280d" />
 Artix <img width="1254" height="759" alt="image" src="https://github.com/user-attachments/assets/1ce05a92-367c-4d50-a314-662a2cc913df" />
 NixOS <img width="1169" height="745" alt="изображение" src="https://github.com/user-attachments/assets/2df9640f-5df4-43fc-b378-dad14973d594" />
 
