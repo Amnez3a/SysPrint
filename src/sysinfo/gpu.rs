@@ -13,6 +13,11 @@ pub fn get_gpu_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Colo
 
     let _ = writeln!(buf, "{}", "--- GPU INFO ---".bold().cyan());
 
+    #[cfg(target_os = "linux")]
+    if get_nvidia_proc_info(buf, c) {
+        return;
+    }
+
     if get_nvidia_info(buf, c) {
         return;
     }
@@ -71,7 +76,7 @@ fn clean_gpu_name(raw: &str) -> String {
     if let Some(pos) = name.rfind("(rev ") {
         name = name[..pos].trim().to_string();
     }
-    
+
     if name.starts_with('[') && name.ends_with(']') {
         name = name[1..name.len() - 1].trim().to_string();
     }
@@ -83,13 +88,47 @@ fn clean_gpu_name(raw: &str) -> String {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn get_nvidia_proc_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
+    let gpus_dir = Path::new("/proc/driver/nvidia/gpus");
+    if !gpus_dir.exists() {
+        return false;
+    }
+
+    let Ok(entries) = fs::read_dir(gpus_dir) else {
+        return false;
+    };
+
+    for entry in entries.flatten() {
+        let info_path = entry.path().join("information");
+        if let Ok(content) = fs::read_to_string(info_path) {
+            let mut model = String::new();
+
+            for line in content.lines() {
+                if line.starts_with("Model:") {
+                    if let Some(pos) = line.find(':') {
+                        model = line[pos + 1..].trim().to_string();
+                    }
+                }
+            }
+
+            if !model.is_empty() {
+                let _ = writeln!(buf, "{}: {}", c("GPU"), clean_gpu_name(&model));
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
 fn get_nvidia_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
     let output = Command::new("nvidia-smi")
-        .args([
-            "--query-gpu=gpu_name,memory.total,memory.used,temperature.gpu",
-            "--format=csv,noheader,nounits",
-        ])
-        .output();
+    .args([
+        "--query-gpu=gpu_name,memory.total,memory.used,temperature.gpu",
+        "--format=csv,noheader,nounits",
+    ])
+    .output();
 
     let output = match output {
         Ok(out) => out,
@@ -179,33 +218,17 @@ fn get_linux_sysfs_gpu(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
 
         let mut gpu_name = String::new();
 
-        if let Ok(target) = fs::read_link(&device_path) {
-            if let Some(pci_slot) = target.file_name().and_then(|s| s.to_str()) {
-                if let Ok(output) = Command::new("lspci").args(["-s", pci_slot]).output() {
-                    let text = String::from_utf8_lossy(&output.stdout);
-                    if let Some(line) = text.lines().next() {
-                        if let Some(pos) = line.find(':') {
-                            let raw = line[pos + 1..].trim();
-                            gpu_name = raw.split(':').last().unwrap_or(raw).trim().to_string();
-                        }
-                    }
-                }
-            }
-        }
+        let vendor_hex = fs::read_to_string(device_path.join("vendor")).unwrap_or_default();
+        let device_hex = fs::read_to_string(device_path.join("device")).unwrap_or_default();
 
-        if gpu_name.is_empty() {
-            let vendor_hex = fs::read_to_string(device_path.join("vendor")).unwrap_or_default();
-            let device_hex = fs::read_to_string(device_path.join("device")).unwrap_or_default();
+        let vendor_id = u16::from_str_radix(vendor_hex.trim().trim_start_matches("0x"), 16).unwrap_or(0);
+        let device_id = u16::from_str_radix(device_hex.trim().trim_start_matches("0x"), 16).unwrap_or(0);
 
-            let vendor_id = u16::from_str_radix(vendor_hex.trim().trim_start_matches("0x"), 16).unwrap_or(0);
-            let device_id = u16::from_str_radix(device_hex.trim().trim_start_matches("0x"), 16).unwrap_or(0);
-
-            if let Some(vendor) = pci_ids::Vendor::from_id(vendor_id) {
-                if let Some(device) = vendor.devices().find(|d| d.id() == device_id) {
-                    gpu_name = device.name().to_string();
-                } else {
-                    gpu_name = format!("{} Graphics", vendor.name());
-                }
+        if let Some(vendor) = pci_ids::Vendor::from_id(vendor_id) {
+            if let Some(device) = vendor.devices().find(|d| d.id() == device_id) {
+                gpu_name = device.name().to_string();
+            } else {
+                gpu_name = format!("{} Graphics", vendor.name());
             }
         }
 
@@ -219,15 +242,15 @@ fn get_linux_sysfs_gpu(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
 
         if vram_used_path.exists() && vram_total_path.exists() {
             let used_bytes: f64 = fs::read_to_string(vram_used_path)
-                .unwrap_or_default()
-                .trim()
-                .parse()
-                .unwrap_or(0.0);
+            .unwrap_or_default()
+            .trim()
+            .parse()
+            .unwrap_or(0.0);
             let total_bytes: f64 = fs::read_to_string(vram_total_path)
-                .unwrap_or_default()
-                .trim()
-                .parse()
-                .unwrap_or(0.0);
+            .unwrap_or_default()
+            .trim()
+            .parse()
+            .unwrap_or(0.0);
 
             if total_bytes > 0.0 {
                 let used_gb = used_bytes / 1024.0 / 1024.0 / 1024.0;
@@ -406,12 +429,25 @@ fn get_generic_gpu_name() -> String {
 
     #[cfg(target_os = "linux")]
     {
-        if let Ok(output) = Command::new("sh").args(["-c", "lspci | grep -Ei 'vga|3d|display'"]).output() {
-            let text = String::from_utf8_lossy(&output.stdout);
-            if let Some(line) = text.lines().next() {
-                if let Some(pos) = line.find(':') {
-                    let raw_name = line[pos + 1..].trim();
-                    return raw_name.split(':').last().unwrap_or(raw_name).trim().to_string();
+        let drm_path = Path::new("/sys/class/drm");
+        if drm_path.exists() {
+            if let Ok(entries) = fs::read_dir(drm_path) {
+                for entry in entries.flatten() {
+                    let name_str = entry.file_name().to_string_lossy().into_owned();
+                    if name_str.starts_with("card") && !name_str.contains('-') {
+                        let device_path = entry.path().join("device");
+                        let vendor_hex = fs::read_to_string(device_path.join("vendor")).unwrap_or_default();
+                        let device_hex = fs::read_to_string(device_path.join("device")).unwrap_or_default();
+
+                        let vendor_id = u16::from_str_radix(vendor_hex.trim().trim_start_matches("0x"), 16).unwrap_or(0);
+                        let device_id = u16::from_str_radix(device_hex.trim().trim_start_matches("0x"), 16).unwrap_or(0);
+
+                        if let Some(vendor) = pci_ids::Vendor::from_id(vendor_id) {
+                            if let Some(device) = vendor.devices().find(|d| d.id() == device_id) {
+                                return device.name().to_string();
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -422,12 +458,12 @@ fn get_generic_gpu_name() -> String {
         if let Ok(output) = Command::new("powershell")
             .args(["-Command", "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"])
             .output()
-        {
-            let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !text.is_empty() {
-                return text.lines().next().unwrap_or("Unknown GPU").to_string();
+            {
+                let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !text.is_empty() {
+                    return text.lines().next().unwrap_or("Unknown GPU").to_string();
+                }
             }
-        }
     }
 
     "Unknown GPU".to_string()

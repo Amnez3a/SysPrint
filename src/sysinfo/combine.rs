@@ -4,7 +4,7 @@ use crate::sysinfo::gpu::get_gpu_info;
 use crate::sysinfo::memory::memory_info;
 use crate::sysinfo::other::other_info;
 use crate::sysinfo::system::system_info;
-use sysinfo::System;
+use sysinfo::{CpuRefreshKind, MemoryRefreshKind, RefreshKind, System};
 
 #[derive(Clone, Copy)]
 pub struct DisplayOptions {
@@ -38,7 +38,11 @@ pub struct SystemInfo {
 
 impl SystemInfo {
     pub fn collect(opts: DisplayOptions) -> Self {
-        let _sys = System::new_all();
+        let _sys = System::new_with_specifics(
+            RefreshKind::nothing()
+                .with_cpu(CpuRefreshKind::everything())
+                .with_memory(MemoryRefreshKind::everything()),
+        );
 
         let mut buffer = String::with_capacity(2048);
 
@@ -69,4 +73,3 @@ impl SystemInfo {
         }
     }
 }
-

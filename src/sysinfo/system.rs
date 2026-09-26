@@ -3,6 +3,8 @@ use colored::ColoredString;
 use colored::Colorize;
 use std::env;
 use std::fmt::Write;
+use std::fs;
+use std::path::Path;
 use sysinfo::System;
 
 // Uptime functions
@@ -37,6 +39,7 @@ pub fn system_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Color
 
     os_version(buf, c);
     check_kernel(buf, c);
+    init_info(buf, c);
 
     // OS_version
     fn os_version(buf: &mut String, c: fn(&str) -> ColoredString) {
@@ -65,6 +68,54 @@ pub fn system_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Color
         let kernel = System::kernel_version().unwrap_or_else(|| "Unknown".to_string());
 
         let _ = writeln!(buf, "{}: {}", c("Kernel"), kernel);
+    }
+
+    pub fn get_init_system() -> String {
+        if let Ok(comm) = fs::read_to_string("/proc/1/comm") {
+            let name = comm.trim();
+            match name {
+                "systemd" => return "systemd".to_string(),
+                "init" | "sysvinit" => {
+                    if Path::new("/run/openrc").exists() || Path::new("/etc/openrc").exists() {
+                        return "OpenRC".to_string();
+                    }
+                    if Path::new("/etc/runit").exists() || Path::new("/run/runit").exists() {
+                        return "runit".to_string();
+                    }
+                    return "SysVinit".to_string();
+                }
+                "runit" | "runit-init" => return "runit".to_string(),
+                "dinit" => return "dinit".to_string(),
+                "s6-svscan" => return "s6".to_string(),
+                _ => return name.to_string(),
+            }
+        }
+
+        if Path::new("/run/systemd/system").exists() {
+            "systemd".to_string()
+        } else if Path::new("/run/openrc").exists() || Path::new("/etc/openrc").exists() {
+            "OpenRC".to_string()
+        } else if Path::new("/etc/runit").exists() || Path::new("/run/runit").exists() {
+            "runit".to_string()
+        } else if Path::new("/sbin/dinit").exists() {
+            "dinit".to_string()
+        } else if cfg!(target_os = "freebsd")
+            || cfg!(target_os = "openbsd")
+            || cfg!(target_os = "netbsd")
+        {
+            "BSD init".to_string()
+        } else if cfg!(target_os = "macos") {
+            "launchd".to_string()
+        } else if cfg!(windows) {
+            "SMSS".to_string()
+        } else {
+            "Unknown".to_string()
+        }
+    }
+
+    pub fn init_info(buf: &mut String, c: fn(&str) -> ColoredString) {
+        let init = get_init_system();
+        let _ = writeln!(buf, "{}: {}", c("Init"), init);
     }
 
     pub fn user_info(buf: &mut String, c: fn(&str) -> ColoredString) {

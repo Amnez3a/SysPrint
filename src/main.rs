@@ -80,4 +80,3 @@ fn decide(flag_hides: bool, config: Option<bool>, config_stronger: bool) -> bool
         config.unwrap_or(true)
     }
 }
-
