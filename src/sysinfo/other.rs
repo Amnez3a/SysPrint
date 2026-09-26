@@ -211,7 +211,7 @@ fn battery_info(buf: &mut String, c: fn(&str) -> ColoredString) {
             battery_full_life_time: u32,
         }
 
-        extern "system" {
+        unsafe extern "system" {
             fn GetSystemPowerStatus(status: *mut SystemPowerStatus) -> i32;
         }
 

@@ -1,9 +1,6 @@
 use crate::sysinfo::combine::DisplayOptions;
 use colored::{ColoredString, Colorize};
-use pci_ids::FromId;
 use std::fmt::Write;
-use std::fs;
-use std::path::Path;
 use std::process::Command;
 
 pub fn get_gpu_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> ColoredString) {
@@ -14,10 +11,11 @@ pub fn get_gpu_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Colo
     let _ = writeln!(buf, "{}", "--- GPU INFO ---".bold().cyan());
 
     #[cfg(target_os = "linux")]
-    if get_nvidia_proc_info(buf, c) {
+    if get_nvidia_fast_info(buf, c) {
         return;
     }
 
+    #[cfg(any(target_os = "linux", windows))]
     if get_nvidia_info(buf, c) {
         return;
     }
@@ -89,7 +87,11 @@ fn clean_gpu_name(raw: &str) -> String {
 }
 
 #[cfg(target_os = "linux")]
-fn get_nvidia_proc_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
+fn get_nvidia_fast_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
+    use std::fs;
+    use std::path::Path;
+    use std::process::Command;
+
     let gpus_dir = Path::new("/proc/driver/nvidia/gpus");
     if !gpus_dir.exists() {
         return false;
@@ -99,36 +101,69 @@ fn get_nvidia_proc_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool 
         return false;
     };
 
+    let mut found_gpu = false;
+
     for entry in entries.flatten() {
         let info_path = entry.path().join("information");
         if let Ok(content) = fs::read_to_string(info_path) {
-            let mut model = String::new();
-
             for line in content.lines() {
                 if line.starts_with("Model:") {
                     if let Some(pos) = line.find(':') {
-                        model = line[pos + 1..].trim().to_string();
+                        let raw_name = line[pos + 1..].trim();
+                        let _ = writeln!(buf, "{}: {}", c("GPU"), clean_gpu_name(raw_name));
+                        found_gpu = true;
+                        break;
                     }
                 }
             }
+        }
+        if found_gpu {
+            break;
+        }
+    }
 
-            if !model.is_empty() {
-                let _ = writeln!(buf, "{}: {}", c("GPU"), clean_gpu_name(&model));
-                return true;
+    if !found_gpu {
+        return false;
+    }
+
+    let output = Command::new("nvidia-smi")
+        .args([
+            "--query-gpu=memory.used,memory.total,temperature.gpu",
+            "--format=csv,noheader,nounits",
+        ])
+        .output();
+
+    if let Ok(out) = output {
+        if out.status.success() {
+            let text = String::from_utf8_lossy(&out.stdout);
+            if let Some(line) = text.lines().next() {
+                let parts: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
+                if parts.len() == 3 {
+                    let used_mb: f64 = parts[0].parse().unwrap_or(0.0);
+                    let total_mb: f64 = parts[1].parse().unwrap_or(0.0);
+                    let temp: &str = parts[2];
+
+                    let used_gb = used_mb / 1024.0;
+                    let total_gb = total_mb / 1024.0;
+
+                    let _ = writeln!(buf, "{}: {:.2} GB / {:.2} GB", c("VRAM"), used_gb, total_gb);
+                    let _ = writeln!(buf, "{}: {}°C", c("GPU Temp"), temp);
+                }
             }
         }
     }
 
-    false
+    true
 }
 
+#[cfg(any(target_os = "linux", windows))]
 fn get_nvidia_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
     let output = Command::new("nvidia-smi")
-    .args([
-        "--query-gpu=gpu_name,memory.total,memory.used,temperature.gpu",
-        "--format=csv,noheader,nounits",
-    ])
-    .output();
+        .args([
+            "--query-gpu=gpu_name,memory.total,memory.used,temperature.gpu",
+            "--format=csv,noheader,nounits",
+        ])
+        .output();
 
     let output = match output {
         Ok(out) => out,
@@ -150,8 +185,14 @@ fn get_nvidia_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
     let mem_used: f64 = parts[2].parse().unwrap_or(0.0) / 1024.0;
     let temp = parts[3];
 
-    let _ = writeln!(buf, "{}: {}", c("GPU"), name);
-    let _ = writeln!(buf, "{}: {:.2} GB / {:.2} GB", c("VRAM"), mem_used, mem_total);
+    let _ = writeln!(buf, "{}: {}", c("GPU"), clean_gpu_name(name));
+    let _ = writeln!(
+        buf,
+        "{}: {:.2} GB / {:.2} GB",
+        c("VRAM"),
+        mem_used,
+        mem_total
+    );
     let _ = writeln!(buf, "{}: {}°C", c("GPU Temp"), temp);
 
     true
@@ -159,7 +200,10 @@ fn get_nvidia_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
 
 #[cfg(target_os = "macos")]
 fn get_macos_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
-    let output = match Command::new("system_profiler").arg("SPDisplaysDataType").output() {
+    let output = match Command::new("system_profiler")
+        .arg("SPDisplaysDataType")
+        .output()
+    {
         Ok(out) => out,
         Err(_) => return false,
     };
@@ -195,6 +239,10 @@ fn get_macos_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
 
 #[cfg(target_os = "linux")]
 fn get_linux_sysfs_gpu(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
+    use pci_ids::FromId;
+    use std::fs;
+    use std::path::Path;
+
     let drm_path = Path::new("/sys/class/drm");
     if !drm_path.exists() {
         return false;
@@ -221,8 +269,10 @@ fn get_linux_sysfs_gpu(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
         let vendor_hex = fs::read_to_string(device_path.join("vendor")).unwrap_or_default();
         let device_hex = fs::read_to_string(device_path.join("device")).unwrap_or_default();
 
-        let vendor_id = u16::from_str_radix(vendor_hex.trim().trim_start_matches("0x"), 16).unwrap_or(0);
-        let device_id = u16::from_str_radix(device_hex.trim().trim_start_matches("0x"), 16).unwrap_or(0);
+        let vendor_id =
+            u16::from_str_radix(vendor_hex.trim().trim_start_matches("0x"), 16).unwrap_or(0);
+        let device_id =
+            u16::from_str_radix(device_hex.trim().trim_start_matches("0x"), 16).unwrap_or(0);
 
         if let Some(vendor) = pci_ids::Vendor::from_id(vendor_id) {
             if let Some(device) = vendor.devices().find(|d| d.id() == device_id) {
@@ -236,21 +286,20 @@ fn get_linux_sysfs_gpu(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
 
         let _ = writeln!(buf, "{}: {}", c("GPU"), gpu_name);
 
-        // VRAM
         let vram_used_path = device_path.join("mem_info_vram_used");
         let vram_total_path = device_path.join("mem_info_vram_total");
 
         if vram_used_path.exists() && vram_total_path.exists() {
             let used_bytes: f64 = fs::read_to_string(vram_used_path)
-            .unwrap_or_default()
-            .trim()
-            .parse()
-            .unwrap_or(0.0);
+                .unwrap_or_default()
+                .trim()
+                .parse()
+                .unwrap_or(0.0);
             let total_bytes: f64 = fs::read_to_string(vram_total_path)
-            .unwrap_or_default()
-            .trim()
-            .parse()
-            .unwrap_or(0.0);
+                .unwrap_or_default()
+                .trim()
+                .parse()
+                .unwrap_or(0.0);
 
             if total_bytes > 0.0 {
                 let used_gb = used_bytes / 1024.0 / 1024.0 / 1024.0;
@@ -259,7 +308,6 @@ fn get_linux_sysfs_gpu(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
             }
         }
 
-        // Temp
         let hwmon_dir = device_path.join("hwmon");
         if let Ok(hwmon_entries) = fs::read_dir(hwmon_dir) {
             for hwmon in hwmon_entries.flatten() {
@@ -283,37 +331,57 @@ fn get_linux_sysfs_gpu(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
 
 #[cfg(windows)]
 fn get_windows_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
-    let script = "Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM | ConvertTo-Json";
-    let output = match Command::new("powershell").args(["-Command", script]).output() {
+    let output = match Command::new("wmic")
+        .args([
+            "path",
+            "win32_VideoController",
+            "get",
+            "Name,AdapterRAM",
+            "/format:csv",
+        ])
+        .output()
+    {
         Ok(out) => out,
         Err(_) => return false,
     };
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    if stdout.trim().is_empty() {
-        return false;
-    }
+    let mut found = false;
 
-    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
-        let obj = if json.is_array() { &json[0] } else { &json };
-        let raw_name = obj["Name"].as_str().unwrap_or("Unknown GPU");
-        let name = clean_gpu_name(raw_name);
-        let vram_bytes = obj["AdapterRAM"].as_f64().unwrap_or(0.0);
-        let vram_gb = vram_bytes / 1024.0 / 1024.0 / 1024.0;
-
-        let _ = writeln!(buf, "{}: {}", c("GPU"), name);
-        if vram_gb > 0.0 {
-            let _ = writeln!(buf, "{}: {:.2} GB", c("VRAM"), vram_gb);
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with("Node") {
+            continue;
         }
-        return true;
+
+        let parts: Vec<&str> = line.split(',').collect();
+        if parts.len() >= 3 {
+            let vram_raw = parts[1].trim();
+            let name = parts[2].trim();
+
+            let clean_name = clean_gpu_name(name);
+            let _ = writeln!(buf, "{}: {}", c("GPU"), clean_name);
+
+            if let Ok(bytes) = vram_raw.parse::<f64>() {
+                let gb = bytes / 1024.0 / 1024.0 / 1024.0;
+                if gb > 0.0 {
+                    let _ = writeln!(buf, "{}: {:.2} GB", c("VRAM"), gb);
+                }
+            }
+            found = true;
+        }
     }
 
-    false
+    found
 }
 
 #[cfg(target_os = "freebsd")]
 fn get_freebsd_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
-    let output = match Command::new("sh").arg("-c").arg("pciconf -lv | grep -B 4 -i 'class=0x03'").output() {
+    let output = match Command::new("sh")
+        .arg("-c")
+        .arg("pciconf -lv | grep -B 4 -i 'class=0x03'")
+        .output()
+    {
         Ok(out) => out,
         Err(_) => return false,
     };
@@ -336,8 +404,14 @@ fn get_freebsd_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool 
 
     let _ = writeln!(buf, "{}: {}", c("GPU"), clean_gpu_name(&name));
 
-    if let Ok(sysctl_out) = Command::new("sysctl").arg("-n").arg("dev.amdtemp.0.core0").output() {
-        let temp_str = String::from_utf8_lossy(&sysctl_out.stdout).trim().to_string();
+    if let Ok(sysctl_out) = Command::new("sysctl")
+        .arg("-n")
+        .arg("dev.amdtemp.0.core0")
+        .output()
+    {
+        let temp_str = String::from_utf8_lossy(&sysctl_out.stdout)
+            .trim()
+            .to_string();
         if !temp_str.is_empty() {
             let _ = writeln!(buf, "{}: {}", c("GPU Temp"), temp_str);
         }
@@ -348,7 +422,11 @@ fn get_freebsd_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool 
 
 #[cfg(target_os = "openbsd")]
 fn get_openbsd_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
-    let output = match Command::new("sh").arg("-c").arg("pcidump -v | grep -i 'vga'").output() {
+    let output = match Command::new("sh")
+        .arg("-c")
+        .arg("pcidump -v | grep -i 'vga'")
+        .output()
+    {
         Ok(out) => out,
         Err(_) => return false,
     };
@@ -375,7 +453,11 @@ fn get_openbsd_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool 
 
 #[cfg(target_os = "netbsd")]
 fn get_netbsd_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
-    let output = match Command::new("sh").arg("-c").arg("pcictl pci0 list | grep -i 'display'").output() {
+    let output = match Command::new("sh")
+        .arg("-c")
+        .arg("pcictl pci0 list | grep -i 'display'")
+        .output()
+    {
         Ok(out) => out,
         Err(_) => return false,
     };
@@ -398,7 +480,10 @@ fn get_netbsd_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
 
     let _ = writeln!(buf, "{}: {}", c("GPU"), clean_gpu_name(&name));
 
-    if let Ok(env_out) = Command::new("envstat").args(["-s", "amdgpu:temperature"]).output() {
+    if let Ok(env_out) = Command::new("envstat")
+        .args(["-s", "amdgpu:temperature"])
+        .output()
+    {
         let env_text = String::from_utf8_lossy(&env_out.stdout);
         if let Some(temp_line) = env_text.lines().find(|l| l.contains("degC")) {
             let parts: Vec<&str> = temp_line.split_whitespace().collect();
@@ -414,7 +499,10 @@ fn get_netbsd_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
 fn get_generic_gpu_name() -> String {
     #[cfg(target_os = "macos")]
     {
-        if let Ok(output) = Command::new("system_profiler").arg("SPDisplaysDataType").output() {
+        if let Ok(output) = Command::new("system_profiler")
+            .arg("SPDisplaysDataType")
+            .output()
+        {
             let text = String::from_utf8_lossy(&output.stdout);
             for line in text.lines() {
                 let trimmed = line.trim();
@@ -429,6 +517,10 @@ fn get_generic_gpu_name() -> String {
 
     #[cfg(target_os = "linux")]
     {
+        use pci_ids::FromId;
+        use std::fs;
+        use std::path::Path;
+
         let drm_path = Path::new("/sys/class/drm");
         if drm_path.exists() {
             if let Ok(entries) = fs::read_dir(drm_path) {
@@ -436,11 +528,17 @@ fn get_generic_gpu_name() -> String {
                     let name_str = entry.file_name().to_string_lossy().into_owned();
                     if name_str.starts_with("card") && !name_str.contains('-') {
                         let device_path = entry.path().join("device");
-                        let vendor_hex = fs::read_to_string(device_path.join("vendor")).unwrap_or_default();
-                        let device_hex = fs::read_to_string(device_path.join("device")).unwrap_or_default();
+                        let vendor_hex =
+                            fs::read_to_string(device_path.join("vendor")).unwrap_or_default();
+                        let device_hex =
+                            fs::read_to_string(device_path.join("device")).unwrap_or_default();
 
-                        let vendor_id = u16::from_str_radix(vendor_hex.trim().trim_start_matches("0x"), 16).unwrap_or(0);
-                        let device_id = u16::from_str_radix(device_hex.trim().trim_start_matches("0x"), 16).unwrap_or(0);
+                        let vendor_id =
+                            u16::from_str_radix(vendor_hex.trim().trim_start_matches("0x"), 16)
+                                .unwrap_or(0);
+                        let device_id =
+                            u16::from_str_radix(device_hex.trim().trim_start_matches("0x"), 16)
+                                .unwrap_or(0);
 
                         if let Some(vendor) = pci_ids::Vendor::from_id(vendor_id) {
                             if let Some(device) = vendor.devices().find(|d| d.id() == device_id) {
@@ -455,15 +553,18 @@ fn get_generic_gpu_name() -> String {
 
     #[cfg(windows)]
     {
-        if let Ok(output) = Command::new("powershell")
-            .args(["-Command", "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"])
+        if let Ok(output) = Command::new("wmic")
+            .args(["path", "win32_VideoController", "get", "name"])
             .output()
-            {
-                let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if !text.is_empty() {
-                    return text.lines().next().unwrap_or("Unknown GPU").to_string();
+        {
+            let text = String::from_utf8_lossy(&output.stdout);
+            for line in text.lines() {
+                let line = line.trim();
+                if !line.is_empty() && line != "Name" {
+                    return line.to_string();
                 }
             }
+        }
     }
 
     "Unknown GPU".to_string()
