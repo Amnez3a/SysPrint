@@ -15,8 +15,13 @@ pub fn get_gpu_info(opts: &DisplayOptions, buf: &mut String, fast_mode: bool, c:
         return;
     }
 
+    #[cfg(windows)]
+    if get_windows_gpu_info(buf, fast_mode, c) {
+        return;
+    }
+
     #[cfg(any(target_os = "linux", windows))]
-    if get_nvidia_info(buf, c) {
+    if get_nvidia_info(buf,fast_mode, c) {
         return;
     }
 
@@ -144,12 +149,18 @@ pub fn get_nvidia_fast_info(buf: &mut String, fast_mode: bool, c: fn(&str) -> Co
 }
 
 #[cfg(any(target_os = "linux", windows))]
-fn get_nvidia_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
-    let output = Command::new("nvidia-smi")
-        .args([
+fn get_nvidia_info(buf: &mut String, fast_mode: bool, c: fn(&str) -> ColoredString) -> bool {
+    let query_args = if fast_mode {
+        vec!["--query-gpu=gpu_name", "--format=csv,noheader,nounits"]
+    } else {
+        vec![
             "--query-gpu=gpu_name,memory.total,memory.used,temperature.gpu",
             "--format=csv,noheader,nounits",
-        ])
+        ]
+    };
+
+    let output = Command::new("nvidia-smi")
+        .args(&query_args)
         .output();
 
     let output = match output {
@@ -163,24 +174,31 @@ fn get_nvidia_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
     }
 
     let parts: Vec<&str> = stdout.split(',').map(|s| s.trim()).collect();
-    if parts.len() < 4 {
+    if parts.is_empty() {
         return false;
     }
 
     let name = parts[0];
-    let mem_total: f64 = parts[1].parse().unwrap_or(0.0) / 1024.0;
-    let mem_used: f64 = parts[2].parse().unwrap_or(0.0) / 1024.0;
-    let temp = parts[3];
-
     let _ = writeln!(buf, "{}: {}", c("GPU"), clean_gpu_name(name));
-    let _ = writeln!(
-        buf,
-        "{}: {:.2} GB / {:.2} GB",
-        c("VRAM"),
-        mem_used,
-        mem_total
-    );
-    let _ = writeln!(buf, "{}: {}°C", c("GPU Temp"), temp);
+
+    if fast_mode {
+        return true;
+    }
+
+    if parts.len() >= 4 {
+        let mem_total: f64 = parts[1].parse().unwrap_or(0.0) / 1024.0;
+        let mem_used: f64 = parts[2].parse().unwrap_or(0.0) / 1024.0;
+        let temp = parts[3];
+
+        let _ = writeln!(
+            buf,
+            "{}: {:.2} GB / {:.2} GB",
+            c("VRAM"),
+            mem_used,
+            mem_total
+        );
+        let _ = writeln!(buf, "{}: {}°C", c("GPU Temp"), temp);
+    }
 
     true
 }
