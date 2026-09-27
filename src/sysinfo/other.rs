@@ -30,9 +30,14 @@ pub fn other_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Colore
 }
 
 fn de_check(buf: &mut String, c: fn(&str) -> ColoredString) {
-    let desktop = env::var("XDG_CURRENT_DESKTOP")
-        .or_else(|_| env::var("DESKTOP_SESSION"))
-        .unwrap_or_else(|_| "Unknown".to_string());
+    let desktop = if cfg!(windows) {
+        "Explorer".to_string()
+    } else {
+        env::var("XDG_CURRENT_DESKTOP")
+            .or_else(|_| env::var("DESKTOP_SESSION"))
+            .unwrap_or_else(|_| "Unknown".to_string())
+    };
+
     let _ = writeln!(buf, "{}: {}", c("DE"), desktop);
 }
 
@@ -127,47 +132,16 @@ fn get_shell(buf: &mut String, c: fn(&str) -> ColoredString) {
 }
 
 fn terminal_info(buf: &mut String, c: fn(&str) -> ColoredString) {
-    let term = if let Ok(term) = env::var("TERM_PROGRAM") {
-        if !term.is_empty() {
-            term
-        } else {
-            get_fallback_term()
-        }
+    let term = if cfg!(windows) {
+        "cmd".to_string()
     } else {
-        get_fallback_term()
+        env::var("TERM_PROGRAM")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| env::var("TERM").unwrap_or_else(|_| "Unknown".to_string()))
     };
 
     let _ = writeln!(buf, "{}: {}", c("Terminal"), term);
-}
-
-fn get_fallback_term() -> String {
-    if env::var("KITTY_WINDOW_ID").is_ok() {
-        return "kitty".to_string();
-    }
-    if env::var("ALACRITTY_SOCKET").is_ok() || env::var("ALACRITTY_LOG").is_ok() {
-        return "alacritty".to_string();
-    }
-    if env::var("KONSOLE_VERSION").is_ok() {
-        return "konsole".to_string();
-    }
-    if env::var("FOOT_SOCKET").is_ok() {
-        return "foot".to_string();
-    }
-    if env::var("WT_SESSION").is_ok() {
-        return "Windows Terminal".to_string();
-    }
-    if let Ok(term) = env::var("TERMINAL") {
-        if !term.is_empty() {
-            return term;
-        }
-    }
-    if let Ok(term) = env::var("TERM") {
-        if term != "xterm-256color" && !term.is_empty() {
-            return term;
-        }
-    }
-
-    "Unknown".to_string()
 }
 
 fn battery_info(buf: &mut String, c: fn(&str) -> ColoredString) {
