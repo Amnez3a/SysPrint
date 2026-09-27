@@ -25,8 +25,8 @@ NixOS  <img width="1201" height="766" alt="изображение" src="https://
 ---
 ### Config
 
-* **Linux / BSD:** `~/.config/.sysprint.toml`
-* **Windows:** `%APPDATA%\.sysprint.toml` *(usually `C:\Users\<Username>\AppData\Roaming\.sysprint.toml`)*
+* **Linux / BSD:** `~/.config/sysprint/config.toml`
+* **Windows:** `%APPDATA%\sysprint\config.toml` *(usually `C:\Users\Имя\AppData\Roaming\sysprint\config.toml`)*
 
 ### Example `.sysprint.toml`
 
