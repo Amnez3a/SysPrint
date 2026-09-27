@@ -26,7 +26,7 @@ pub fn get_gpu_info(opts: &DisplayOptions, buf: &mut String, fast_mode: bool, c:
     }
 
     #[cfg(target_os = "linux")]
-    if get_linux_sysfs_gpu(buf, c) {
+    if get_linux_sysfs_gpu(buf, fast_mode, c) {
         return;
     }
 
@@ -225,7 +225,7 @@ fn get_macos_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
 }
 
 #[cfg(target_os = "linux")]
-fn get_linux_sysfs_gpu(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
+fn get_linux_sysfs_gpu(buf: &mut String, fast_mode: bool, c: fn(&str) -> ColoredString) -> bool {
     use pci_ids::FromId;
     use std::fs;
     use std::path::Path;
@@ -272,6 +272,10 @@ fn get_linux_sysfs_gpu(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
         gpu_name = clean_gpu_name(&gpu_name);
 
         let _ = writeln!(buf, "{}: {}", c("GPU"), gpu_name);
+
+        if fast_mode {
+            return true;
+        }
 
         let vram_used_path = device_path.join("mem_info_vram_used");
         let vram_total_path = device_path.join("mem_info_vram_total");
