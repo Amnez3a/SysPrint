@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-const FILE_NAME: &str = ".sysprint.toml";
+const FILE_NAME: &str = "sysprint.toml";
 
 /// Which sections are enabled.
 ///
@@ -13,7 +13,7 @@ const FILE_NAME: &str = ".sysprint.toml";
 /// - `true` — the config value always wins;
 /// - `false` — an explicitly passed CLI flag wins (config is the fallback).
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", default)]
 pub struct Config {
     pub show_system_info: bool,
     pub show_cpu_info: bool,
@@ -47,8 +47,8 @@ impl Default for Config {
 
 pub fn config_path() -> PathBuf {
     dirs::config_dir()
-        .map(|dir| dir.join(FILE_NAME))
-        .unwrap_or_else(|| PathBuf::from(FILE_NAME))
+        .map(|dir| dir.join("sysprint").join("config.toml"))
+        .unwrap_or_else(|| PathBuf::from("sysprint.toml"))
 }
 
 pub fn load() -> Result<Option<Config>, String> {
