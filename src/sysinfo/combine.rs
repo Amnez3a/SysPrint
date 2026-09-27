@@ -15,6 +15,7 @@ pub struct DisplayOptions {
     pub other: bool,
     pub gpu: bool,
     pub mini_mode: bool,
+    pub fast_mode: bool,
 }
 
 impl Default for DisplayOptions {
@@ -27,6 +28,7 @@ impl Default for DisplayOptions {
             other: true,
             gpu: true,
             mini_mode: false,
+            fast_mode: false,
         }
     }
 }
@@ -48,6 +50,8 @@ impl SystemInfo {
 
         let (_, _, c) = crate::logos::get_logo(opts.mini_mode);
 
+        let (_, _, c) = crate::logos::get_logo(opts.mini_mode);
+
         if opts.system {
             system_info(&opts, &mut buffer, c);
         }
@@ -55,7 +59,7 @@ impl SystemInfo {
             cpu_info(&opts, &mut buffer, &_sys, c);
         }
         if opts.gpu {
-            get_gpu_info(&opts, &mut buffer, c);
+            get_gpu_info(&opts, &mut buffer, opts.fast_mode, c );
         }
         if opts.memory {
             memory_info(&opts, &mut buffer, &_sys, c);

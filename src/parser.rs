@@ -31,7 +31,11 @@ pub struct Arguments {
     #[arg(long = "hide-gpu")]
     pub hide_gpu: bool,
 
-    // Mini mode
+    /// Mini mode
     #[arg(short = 'm', long = "mini")]
     pub mini: bool,
+
+    /// Fast mode
+    #[arg(short = 'f', long = "fast-mode")]
+    pub fast_mode: bool,
 }

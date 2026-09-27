@@ -25,6 +25,8 @@ pub struct Config {
     pub config_stronger: bool,
     #[serde(default)]
     pub mini_mode: bool,
+    #[serde(default)]
+    pub fast_mode: bool,
 }
 
 impl Default for Config {
@@ -38,6 +40,7 @@ impl Default for Config {
             show_gpu_info: true,
             config_stronger: false,
             mini_mode: false,
+            fast_mode: false,
         }
     }
 }
@@ -84,6 +87,7 @@ pub fn generate() -> Result<PathBuf, String> {
     let contents = format!(
         "# SysPrint configuration\n\
          # When a CLI flag contradicts the config, `config-stronger = true` makes the config win.\n\
+         \n#When a `fast-mode = true` SysPrint be fast, but no Temp and VRAM GPU info (but will be a name).\n\
          {}\n",
         toml::to_string_pretty(&Config::default()).map_err(|e| e.to_string())?
     );

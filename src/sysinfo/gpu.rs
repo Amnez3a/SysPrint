@@ -3,7 +3,7 @@ use colored::{ColoredString, Colorize};
 use std::fmt::Write;
 use std::process::Command;
 
-pub fn get_gpu_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> ColoredString) {
+pub fn get_gpu_info(opts: &DisplayOptions, buf: &mut String, fast_mode: bool, c: fn(&str) -> ColoredString) {
     if !opts.gpu {
         return;
     }
@@ -11,7 +11,7 @@ pub fn get_gpu_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Colo
     let _ = writeln!(buf, "{}", "--- GPU INFO ---".bold().cyan());
 
     #[cfg(target_os = "linux")]
-    if get_nvidia_fast_info(buf, c) {
+    if get_nvidia_fast_info(buf, fast_mode, c) {
         return;
     }
 
@@ -31,7 +31,7 @@ pub fn get_gpu_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Colo
     }
 
     #[cfg(windows)]
-    if get_windows_gpu_info(buf, c) {
+    if get_windows_gpu_info(buf, fast_mode, c) {
         return;
     }
 
@@ -87,20 +87,14 @@ fn clean_gpu_name(raw: &str) -> String {
 }
 
 #[cfg(target_os = "linux")]
-fn get_nvidia_fast_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
+pub fn get_nvidia_fast_info(buf: &mut String, fast_mode: bool, c: fn(&str) -> ColoredString) -> bool {
     use std::fs;
     use std::path::Path;
-    use std::process::Command;
 
     let gpus_dir = Path::new("/proc/driver/nvidia/gpus");
-    if !gpus_dir.exists() {
-        return false;
-    }
+    if !gpus_dir.exists() { return false; }
 
-    let Ok(entries) = fs::read_dir(gpus_dir) else {
-        return false;
-    };
-
+    let Ok(entries) = fs::read_dir(gpus_dir) else { return false; };
     let mut found_gpu = false;
 
     for entry in entries.flatten() {
@@ -117,20 +111,17 @@ fn get_nvidia_fast_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool 
                 }
             }
         }
-        if found_gpu {
-            break;
-        }
+        if found_gpu { break; }
     }
 
-    if !found_gpu {
-        return false;
+    if !found_gpu { return false; }
+
+    if fast_mode {
+        return true;
     }
 
     let output = Command::new("nvidia-smi")
-        .args([
-            "--query-gpu=memory.used,memory.total,temperature.gpu",
-            "--format=csv,noheader,nounits",
-        ])
+        .args(["--query-gpu=memory.used,memory.total,temperature.gpu", "--format=csv,noheader,nounits"])
         .output();
 
     if let Ok(out) = output {
@@ -141,12 +132,8 @@ fn get_nvidia_fast_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool 
                 if parts.len() == 3 {
                     let used_mb: f64 = parts[0].parse().unwrap_or(0.0);
                     let total_mb: f64 = parts[1].parse().unwrap_or(0.0);
-                    let temp: &str = parts[2];
-
-                    let used_gb = used_mb / 1024.0;
-                    let total_gb = total_mb / 1024.0;
-
-                    let _ = writeln!(buf, "{}: {:.2} GB / {:.2} GB", c("VRAM"), used_gb, total_gb);
+                    let temp = parts[2];
+                    let _ = writeln!(buf, "{}: {:.2} GB / {:.2} GB", c("VRAM"), used_mb / 1024.0, total_mb / 1024.0);
                     let _ = writeln!(buf, "{}: {}°C", c("GPU Temp"), temp);
                 }
             }
@@ -330,45 +317,48 @@ fn get_linux_sysfs_gpu(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
 }
 
 #[cfg(windows)]
-fn get_windows_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
-    let output = match Command::new("wmic")
-        .args([
-            "path",
-            "win32_VideoController",
-            "get",
-            "Name,AdapterRAM",
-            "/format:csv",
-        ])
-        .output()
-    {
-        Ok(out) => out,
-        Err(_) => return false,
+fn get_windows_gpu_info(buf: &mut String, fast_mode: bool, c: fn(&str) -> ColoredString) -> bool {
+    use winreg::enums::*;
+    use winreg::RegKey;
+
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let video_key_path = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfba-08002be10318}";
+
+    let Ok(video_key) = hklm.open_subkey(video_key_path) else {
+        return false;
     };
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
     let mut found = false;
 
-    for line in stdout.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with("Node") {
+    for subkey_name in video_key.enum_keys().flatten() {
+        if subkey_name.len() != 4 || !subkey_name.chars().all(|ch| ch.is_ascii_digit()) {
             continue;
         }
 
-        let parts: Vec<&str> = line.split(',').collect();
-        if parts.len() >= 3 {
-            let vram_raw = parts[1].trim();
-            let name = parts[2].trim();
+        if let Ok(gpu_sub_key) = video_key.open_subkey(&subkey_name) {
+            if let Ok(driver_desc) = gpu_sub_key.get_value::<String, _>("DriverDesc") {
+                let clean_name = clean_gpu_name(&driver_desc);
+                let _ = writeln!(buf, "{}: {}", c("GPU"), clean_name);
+                found = true;
 
-            let clean_name = clean_gpu_name(name);
-            let _ = writeln!(buf, "{}: {}", c("GPU"), clean_name);
-
-            if let Ok(bytes) = vram_raw.parse::<f64>() {
-                let gb = bytes / 1024.0 / 1024.0 / 1024.0;
-                if gb > 0.0 {
-                    let _ = writeln!(buf, "{}: {:.2} GB", c("VRAM"), gb);
+                if fast_mode {
+                    return true;
                 }
+
+                if let Ok(mem_bytes) = gpu_sub_key.get_value::<u64, _>("HardwareInformation.MemorySize") {
+                    let gb = mem_bytes as f64 / 1024.0 / 1024.0 / 1024.0;
+                    if gb > 0.0 {
+                        let _ = writeln!(buf, "{}: {:.2} GB", c("VRAM"), gb);
+                    }
+                } else if let Ok(mem_bytes) = gpu_sub_key.get_value::<u32, _>("HardwareInformation.MemorySize") {
+                    let gb = mem_bytes as f64 / 1024.0 / 1024.0 / 1024.0;
+                    if gb > 0.0 {
+                        let _ = writeln!(buf, "{}: {:.2} GB", c("VRAM"), gb);
+                    }
+                }
+
+                break;
             }
-            found = true;
         }
     }
 
@@ -553,15 +543,22 @@ fn get_generic_gpu_name() -> String {
 
     #[cfg(windows)]
     {
-        if let Ok(output) = Command::new("wmic")
-            .args(["path", "win32_VideoController", "get", "name"])
-            .output()
-        {
-            let text = String::from_utf8_lossy(&output.stdout);
-            for line in text.lines() {
-                let line = line.trim();
-                if !line.is_empty() && line != "Name" {
-                    return line.to_string();
+        use winreg::enums::*;
+        use winreg::RegKey;
+
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        let path = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfba-08002be10318}";
+
+        if let Ok(video_key) = hklm.open_subkey(path) {
+            for subkey_name in video_key.enum_keys().flatten() {
+                if subkey_name.len() == 4 && subkey_name.chars().all(|ch| ch.is_ascii_digit()) {
+                    if let Ok(gpu_sub_key) = video_key.open_subkey(&subkey_name) {
+                        if let Ok(driver_desc) = gpu_sub_key.get_value::<String, _>("DriverDesc") {
+                            if !driver_desc.trim().is_empty() {
+                                return driver_desc;
+                            }
+                        }
+                    }
                 }
             }
         }

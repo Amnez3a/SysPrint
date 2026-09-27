@@ -58,6 +58,7 @@ fn main() {
         ),
         gpu: decide(args.hide_gpu, cfg.map(|c| c.show_gpu_info), config_stronger),
         mini_mode: decide(args.mini, cfg.map(|c| c.mini_mode), config_stronger),
+        fast_mode: decide(args.fast_mode, cfg.map(|c| c.fast_mode), config_stronger),
     };
 
     let info = SystemInfo::collect(opts);
