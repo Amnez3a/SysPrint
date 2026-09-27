@@ -1,10 +1,11 @@
-//! Configuration file handling (`.sysprint.toml`).
+//! Configuration file handling (`config.toml`).
 use std::fs;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-const FILE_NAME: &str = "sysprint.toml";
+const CONFIG_DIR_NAME: &str = "sysprint";
+const FILE_NAME: &str = "config.toml";
 
 /// Which sections are enabled.
 ///
@@ -21,11 +22,8 @@ pub struct Config {
     pub show_disks_info: bool,
     pub show_other_info: bool,
     pub show_gpu_info: bool,
-    #[serde(default)]
     pub config_stronger: bool,
-    #[serde(default)]
     pub mini_mode: bool,
-    #[serde(default)]
     pub fast_mode: bool,
 }
 
@@ -47,8 +45,8 @@ impl Default for Config {
 
 pub fn config_path() -> PathBuf {
     dirs::config_dir()
-        .map(|dir| dir.join("sysprint").join("config.toml"))
-        .unwrap_or_else(|| PathBuf::from("sysprint.toml"))
+        .map(|dir| dir.join(CONFIG_DIR_NAME).join(FILE_NAME))
+        .unwrap_or_else(|| PathBuf::from(FILE_NAME))
 }
 
 pub fn load() -> Result<Option<Config>, String> {
@@ -56,7 +54,6 @@ pub fn load() -> Result<Option<Config>, String> {
     let contents = match fs::read_to_string(&path) {
         Ok(contents) => contents,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            // if don`t have config
             let _ = generate();
             return Ok(Some(Config::default()));
         }
@@ -87,7 +84,7 @@ pub fn generate() -> Result<PathBuf, String> {
     let contents = format!(
         "# SysPrint configuration\n\
          # When a CLI flag contradicts the config, `config-stronger = true` makes the config win.\n\
-         \n#When a `fast-mode = true` SysPrint be fast, but no Temp and VRAM GPU info (but will be a name).\n\
+         \n# When `fast-mode = true`, SysPrint will be fast, omitting Temp and VRAM GPU info.\n\
          {}\n",
         toml::to_string_pretty(&Config::default()).map_err(|e| e.to_string())?
     );
