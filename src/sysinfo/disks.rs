@@ -10,7 +10,10 @@ pub fn disk_info(opts: &DisplayOptions, buf: &mut String, c :fn(&str) -> Colored
         return;
     }
 
-    let _ = writeln!(buf,"{}", "--- Disks INFO ---".bold().cyan());
+    if !opts.compact_mode {
+        let _ = writeln!(buf, "{}", "--- Disks INFO ---".bold().cyan());
+    }
+
     let disks = Disks::new_with_refreshed_list();
     for disk in &disks {
         let total_gb = disk.total_space() as f64 / 1024.0 / 1024.0 / 1024.0;

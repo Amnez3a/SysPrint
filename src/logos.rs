@@ -3,7 +3,7 @@ use colored::*;
 use std::path::Path;
 use std::env;
 
-pub fn get_logo(mini: bool) -> (Vec<ColoredString>, usize, fn(&str) -> ColoredString) {
+pub fn get_logo(mini_logo: bool) -> (Vec<ColoredString>, usize, fn(&str) -> ColoredString) {
     let mut os_name = System::name().unwrap_or_default().to_lowercase();
 
     // Android/Termux
@@ -14,7 +14,7 @@ pub fn get_logo(mini: bool) -> (Vec<ColoredString>, usize, fn(&str) -> ColoredSt
         os_name = "android".to_string();
     }
 
-    let (raw_logo, color_func): (&str, fn(&str) -> ColoredString) = if mini {
+    let (raw_logo, color_func): (&str, fn(&str) -> ColoredString) = if mini_logo {
         // Mini
         match os_name.as_str() {
             s if s.contains("arch")    => (include_str!("../assets/mini/arch.txt"), |s| s.blue().bold()),

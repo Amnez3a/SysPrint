@@ -11,13 +11,20 @@ pub fn other_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Colore
         return;
     }
 
-    let _ = writeln!(buf, "{}", "--- Other Info ---".bold().cyan());
+    if !opts.compact_mode {
+        let _ = writeln!(buf, "{}", "--- Other INFO ---".bold().cyan());
+    }
 
     de_check(buf, c);
+    if !opts.hide_fetch_info{
+        sysprint_info(buf, c);
+    }
+    if opts.compact_mode {
+        return;
+    }
     wm_check(buf, c);
     terminal_info(buf, c);
     get_shell(buf, c);
-    sysprint_info(buf, c);
     battery_info(buf, c);
     system_time(buf, c);
 }
@@ -163,15 +170,6 @@ fn get_fallback_term() -> String {
     "Unknown".to_string()
 }
 
-fn sysprint_info(buf: &mut String, c: fn(&str) -> ColoredString) {
-    let _ = writeln!(
-        buf,
-        "{}: SysPrint v{}",
-        c("Fetch"),
-        env!("CARGO_PKG_VERSION")
-    );
-}
-
 fn battery_info(buf: &mut String, c: fn(&str) -> ColoredString) {
     let mut battery_str = String::new();
 
@@ -239,4 +237,13 @@ fn battery_info(buf: &mut String, c: fn(&str) -> ColoredString) {
 fn system_time(buf: &mut String, c: fn(&str) -> ColoredString) {
     let now = Local::now();
     let _ = writeln!(buf, "{}: {}", c("Locale Time"), now.format("%H:%M"));
+}
+
+fn sysprint_info(buf: &mut String, c: fn(&str) -> ColoredString) {
+    let _ = writeln!(
+        buf,
+        "{}: SysPrint v{}",
+        c("Fetch"),
+        env!("CARGO_PKG_VERSION")
+    );
 }

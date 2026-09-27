@@ -14,8 +14,10 @@ pub struct DisplayOptions {
     pub disks: bool,
     pub other: bool,
     pub gpu: bool,
-    pub mini_mode: bool,
+    pub mini_logo_mode: bool,
+    pub compact_mode: bool,
     pub fast_mode: bool,
+    pub hide_fetch_info: bool,
 }
 
 impl Default for DisplayOptions {
@@ -27,30 +29,49 @@ impl Default for DisplayOptions {
             disks: true,
             other: true,
             gpu: true,
-            mini_mode: false,
+            mini_logo_mode: false,
+            compact_mode: false,
             fast_mode: false,
+            hide_fetch_info: false,
         }
     }
 }
 
 pub struct SystemInfo {
     pub buffer: String,
-    pub mini_mode: bool,
+    pub mini_logo_mode: bool,
 }
 
 impl SystemInfo {
     pub fn collect(opts: DisplayOptions) -> Self {
+        let mut buffer = String::with_capacity(2048);
+        let (_, _, c) = crate::logos::get_logo(opts.mini_logo_mode);
+
+        if opts.compact_mode {
+            let _sys = System::new_with_specifics(
+                RefreshKind::nothing()
+                    .with_cpu(CpuRefreshKind::everything())
+                    .with_memory(MemoryRefreshKind::everything()),
+            );
+
+            system_info(&opts, &mut buffer, c);
+            cpu_info(&opts, &mut buffer, &_sys, c);
+            get_gpu_info(&opts, &mut buffer, opts.fast_mode, c);
+            memory_info(&opts, &mut buffer, &_sys, c);
+            other_info(&opts, &mut buffer, c);
+
+            return Self {
+                buffer,
+                mini_logo_mode: opts.mini_logo_mode,
+            };
+        }
+
+        // --- STANDARD / FULL MODE BRANCH ---
         let _sys = System::new_with_specifics(
             RefreshKind::nothing()
                 .with_cpu(CpuRefreshKind::everything())
                 .with_memory(MemoryRefreshKind::everything()),
         );
-
-        let mut buffer = String::with_capacity(2048);
-
-        let (_, _, c) = crate::logos::get_logo(opts.mini_mode);
-
-        let (_, _, c) = crate::logos::get_logo(opts.mini_mode);
 
         if opts.system {
             system_info(&opts, &mut buffer, c);
@@ -59,7 +80,7 @@ impl SystemInfo {
             cpu_info(&opts, &mut buffer, &_sys, c);
         }
         if opts.gpu {
-            get_gpu_info(&opts, &mut buffer, opts.fast_mode, c );
+            get_gpu_info(&opts, &mut buffer, opts.fast_mode, c);
         }
         if opts.memory {
             memory_info(&opts, &mut buffer, &_sys, c);
@@ -73,7 +94,7 @@ impl SystemInfo {
 
         Self {
             buffer,
-            mini_mode: opts.mini_mode,
+            mini_logo_mode: opts.mini_logo_mode,
         }
     }
 }

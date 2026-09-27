@@ -8,50 +8,52 @@ pub fn get_gpu_info(opts: &DisplayOptions, buf: &mut String, fast_mode: bool, c:
         return;
     }
 
-    let _ = writeln!(buf, "{}", "--- GPU INFO ---".bold().cyan());
+    if !opts.compact_mode {
+        let _ = writeln!(buf, "{}", "--- GPU INFO ---".bold().cyan());
+    }
 
     #[cfg(target_os = "linux")]
-    if get_nvidia_fast_info(buf, fast_mode, c) {
+    if get_nvidia_fast_info(opts, buf, fast_mode, c) {
         return;
     }
 
     #[cfg(windows)]
-    if get_windows_gpu_info(buf, fast_mode, c) {
+    if get_windows_gpu_info(opts, buf, fast_mode, c) {
         return;
     }
 
     #[cfg(any(target_os = "linux", windows))]
-    if get_nvidia_info(buf,fast_mode, c) {
+    if get_nvidia_info(opts, buf, fast_mode, c) {
         return;
     }
 
     #[cfg(target_os = "macos")]
-    if get_macos_gpu_info(buf, c) {
+    if get_macos_gpu_info(opts, buf, c) {
         return;
     }
 
     #[cfg(target_os = "linux")]
-    if get_linux_sysfs_gpu(buf, fast_mode, c) {
+    if get_linux_sysfs_gpu(opts, buf, fast_mode, c) {
         return;
     }
 
     #[cfg(windows)]
-    if get_windows_gpu_info(buf, fast_mode, c) {
+    if get_windows_gpu_info(opts, buf, fast_mode, c) {
         return;
     }
 
     #[cfg(target_os = "freebsd")]
-    if get_freebsd_gpu_info(buf, c) {
+    if get_freebsd_gpu_info(opts, buf, c) {
         return;
     }
 
     #[cfg(target_os = "openbsd")]
-    if get_openbsd_gpu_info(buf, c) {
+    if get_openbsd_gpu_info(opts, buf, c) {
         return;
     }
 
     #[cfg(target_os = "netbsd")]
-    if get_netbsd_gpu_info(buf, c) {
+    if get_netbsd_gpu_info(opts, buf, c) {
         return;
     }
 
@@ -92,7 +94,12 @@ fn clean_gpu_name(raw: &str) -> String {
 }
 
 #[cfg(target_os = "linux")]
-pub fn get_nvidia_fast_info(buf: &mut String, fast_mode: bool, c: fn(&str) -> ColoredString) -> bool {
+pub fn get_nvidia_fast_info(
+    opts: &DisplayOptions,
+    buf: &mut String,
+    fast_mode: bool,
+    c: fn(&str) -> ColoredString,
+) -> bool {
     use std::fs;
     use std::path::Path;
 
@@ -121,7 +128,7 @@ pub fn get_nvidia_fast_info(buf: &mut String, fast_mode: bool, c: fn(&str) -> Co
 
     if !found_gpu { return false; }
 
-    if fast_mode {
+    if fast_mode || opts.compact_mode {
         return true;
     }
 
@@ -149,8 +156,13 @@ pub fn get_nvidia_fast_info(buf: &mut String, fast_mode: bool, c: fn(&str) -> Co
 }
 
 #[cfg(any(target_os = "linux", windows))]
-fn get_nvidia_info(buf: &mut String, fast_mode: bool, c: fn(&str) -> ColoredString) -> bool {
-    let query_args = if fast_mode {
+fn get_nvidia_info(
+    opts: &DisplayOptions,
+    buf: &mut String,
+    fast_mode: bool,
+    c: fn(&str) -> ColoredString,
+) -> bool {
+    let query_args = if fast_mode || opts.compact_mode {
         vec!["--query-gpu=gpu_name", "--format=csv,noheader,nounits"]
     } else {
         vec![
@@ -181,7 +193,7 @@ fn get_nvidia_info(buf: &mut String, fast_mode: bool, c: fn(&str) -> ColoredStri
     let name = parts[0];
     let _ = writeln!(buf, "{}: {}", c("GPU"), clean_gpu_name(name));
 
-    if fast_mode {
+    if fast_mode || opts.compact_mode {
         return true;
     }
 
@@ -204,7 +216,7 @@ fn get_nvidia_info(buf: &mut String, fast_mode: bool, c: fn(&str) -> ColoredStri
 }
 
 #[cfg(target_os = "macos")]
-fn get_macos_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
+fn get_macos_gpu_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
     let output = match Command::new("system_profiler")
         .arg("SPDisplaysDataType")
         .output()
@@ -235,7 +247,7 @@ fn get_macos_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
     }
 
     let _ = writeln!(buf, "{}: {}", c("GPU"), clean_gpu_name(&gpu_name));
-    if !vram.is_empty() {
+    if !opts.compact_mode && !vram.is_empty() {
         let _ = writeln!(buf, "{}: {}", c("VRAM"), vram);
     }
 
@@ -243,7 +255,12 @@ fn get_macos_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
 }
 
 #[cfg(target_os = "linux")]
-fn get_linux_sysfs_gpu(buf: &mut String, fast_mode: bool, c: fn(&str) -> ColoredString) -> bool {
+fn get_linux_sysfs_gpu(
+    opts: &DisplayOptions,
+    buf: &mut String,
+    fast_mode: bool,
+    c: fn(&str) -> ColoredString,
+) -> bool {
     use pci_ids::FromId;
     use std::fs;
     use std::path::Path;
@@ -291,7 +308,7 @@ fn get_linux_sysfs_gpu(buf: &mut String, fast_mode: bool, c: fn(&str) -> Colored
 
         let _ = writeln!(buf, "{}: {}", c("GPU"), gpu_name);
 
-        if fast_mode {
+        if fast_mode || opts.compact_mode {
             return true;
         }
 
@@ -339,7 +356,12 @@ fn get_linux_sysfs_gpu(buf: &mut String, fast_mode: bool, c: fn(&str) -> Colored
 }
 
 #[cfg(windows)]
-fn get_windows_gpu_info(buf: &mut String, fast_mode: bool, c: fn(&str) -> ColoredString) -> bool {
+fn get_windows_gpu_info(
+    opts: &DisplayOptions,
+    buf: &mut String,
+    fast_mode: bool,
+    c: fn(&str) -> ColoredString,
+) -> bool {
     use winreg::enums::*;
     use winreg::RegKey;
 
@@ -363,7 +385,7 @@ fn get_windows_gpu_info(buf: &mut String, fast_mode: bool, c: fn(&str) -> Colore
                 let _ = writeln!(buf, "{}: {}", c("GPU"), clean_name);
                 found = true;
 
-                if fast_mode {
+                if fast_mode || opts.compact_mode {
                     return true;
                 }
 
@@ -388,7 +410,7 @@ fn get_windows_gpu_info(buf: &mut String, fast_mode: bool, c: fn(&str) -> Colore
 }
 
 #[cfg(target_os = "freebsd")]
-fn get_freebsd_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
+fn get_freebsd_gpu_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
     let output = match Command::new("sh")
         .arg("-c")
         .arg("pciconf -lv | grep -B 4 -i 'class=0x03'")
@@ -416,6 +438,10 @@ fn get_freebsd_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool 
 
     let _ = writeln!(buf, "{}: {}", c("GPU"), clean_gpu_name(&name));
 
+    if opts.compact_mode {
+        return true;
+    }
+
     if let Ok(sysctl_out) = Command::new("sysctl")
         .arg("-n")
         .arg("dev.amdtemp.0.core0")
@@ -433,7 +459,7 @@ fn get_freebsd_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool 
 }
 
 #[cfg(target_os = "openbsd")]
-fn get_openbsd_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
+fn get_openbsd_gpu_info(_opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
     let output = match Command::new("sh")
         .arg("-c")
         .arg("pcidump -v | grep -i 'vga'")
@@ -464,7 +490,7 @@ fn get_openbsd_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool 
 }
 
 #[cfg(target_os = "netbsd")]
-fn get_netbsd_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
+fn get_netbsd_gpu_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
     let output = match Command::new("sh")
         .arg("-c")
         .arg("pcictl pci0 list | grep -i 'display'")
@@ -491,6 +517,10 @@ fn get_netbsd_gpu_info(buf: &mut String, c: fn(&str) -> ColoredString) -> bool {
     }
 
     let _ = writeln!(buf, "{}: {}", c("GPU"), clean_gpu_name(&name));
+
+    if opts.compact_mode {
+        return true;
+    }
 
     if let Ok(env_out) = Command::new("envstat")
         .args(["-s", "amdgpu:temperature"])

@@ -38,4 +38,13 @@ pub struct Arguments {
     /// Fast mode
     #[arg(short = 'f', long = "fast-mode")]
     pub fast_mode: bool,
+
+    /// Compact mode
+    #[arg(short = 'c', long = "compact-mode")]
+    pub compact_mode: bool,
+
+    /// Hide "Fetch: SysPrint"
+    #[arg(long = "hide-fetch-info")]
+    pub hide_fetch_info: bool,
+
 }

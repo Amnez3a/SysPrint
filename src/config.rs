@@ -23,8 +23,10 @@ pub struct Config {
     pub show_other_info: bool,
     pub show_gpu_info: bool,
     pub config_stronger: bool,
-    pub mini_mode: bool,
+    pub mini_logo_mode: bool,
     pub fast_mode: bool,
+    pub compact_mode: bool,
+    pub hide_fetch_info: bool,
 }
 
 impl Default for Config {
@@ -37,8 +39,10 @@ impl Default for Config {
             show_other_info: true,
             show_gpu_info: true,
             config_stronger: false,
-            mini_mode: false,
+            mini_logo_mode: false,
             fast_mode: false,
+            compact_mode: false,
+            hide_fetch_info: false,
         }
     }
 }

@@ -9,22 +9,35 @@ pub fn cpu_info(opts: &DisplayOptions, buf: &mut String, sys: &System, c :fn(&st
         return;
     }
 
-    let _ = writeln!(buf, "{}", "--- CPU INFO ---".bold().cyan());
+    if !opts.compact_mode {
+        let _ = writeln!(buf, "{}", "--- CPU INFO ---".bold().cyan());
+    }
 
-    ggz_and_name_cpu(buf, sys, c);
+    cpu_name(buf, sys, c);
+    if opts.compact_mode {
+        return;
+    }
+    ggz_cpu(buf, sys, c);
     cpu_usage(buf, sys, c);
     cpu_temperature(buf, c);
     cpu_cores_and_threads(buf, sys, c);
     cpu_arch(buf, c);
 
-    fn ggz_and_name_cpu(buf: &mut String, sys: &System, c :fn(&str) -> ColoredString) {
+    fn cpu_name(buf: &mut String, sys: &System, c :fn(&str) -> ColoredString){
         let cpus = sys.cpus();
         if let Some(cpu) = cpus.first() {
             let _ = writeln!(buf, "{}: {}", c("CPU name"), cpu.brand().trim());
+        }
+        else {
+            let _ = writeln!(buf, "CPU: Unknown");
+        }
+    }
+
+    fn ggz_cpu(buf: &mut String, sys: &System, c :fn(&str) -> ColoredString) {
+        let cpus = sys.cpus();
+        if let Some(cpu) = cpus.first() {
             let freq_ghz = cpu.frequency() as f64 / 1000.0;
             let _ = writeln!(buf, "{}: {:.2} GHz", c("GHz"), freq_ghz);
-        } else {
-            let _ = writeln!(buf, "CPU: Unknown");
         }
     }
 

@@ -15,7 +15,9 @@ pub fn memory_info(
         return;
     }
 
-    let _ = writeln!(buf, "{}", "--- Memory INFO ---".bold().cyan());
+    if !opts.compact_mode {
+        let _ = writeln!(buf, "{}", "--- Memory INFO ---".bold().cyan());
+    }
     let total_ram = sys.total_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
     let used_ram = sys.used_memory() as f64 / 1024.0 / 1024.0 / 1024.0;
     let _ = writeln!(

@@ -28,18 +28,24 @@ pub fn system_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Color
         return;
     }
 
-    let _ = writeln!(buf, "{}", "--- System INFO ---".bold().cyan());
+    if !opts.compact_mode {
+        let _ = writeln!(buf, "{}", "--- System INFO ---".bold().cyan());
+    }
 
     os_name(buf, c);
+    check_kernel(buf, c);
+    if opts.compact_mode{
+        return;
+    }
+    os_version(buf, c);
+    init_info(buf, c);
+    host(buf, c);
+    user_info(buf, c);
 
     // OS_name
     fn os_name(buf: &mut String, c: fn(&str) -> ColoredString) {
         let _ = writeln!(buf, "{}: {}", c("OS"), System::name().unwrap_or_default());
     }
-
-    os_version(buf, c);
-    check_kernel(buf, c);
-    init_info(buf, c);
 
     // OS_version
     fn os_version(buf: &mut String, c: fn(&str) -> ColoredString) {
@@ -50,9 +56,6 @@ pub fn system_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Color
             System::os_version().unwrap_or_default()
         );
     }
-
-    host(buf, c);
-    user_info(buf, c);
 
     // Host name
     fn host(buf: &mut String, c: fn(&str) -> ColoredString) {
