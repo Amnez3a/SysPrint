@@ -1,6 +1,6 @@
 [package]
 name = "sysprint"
-version = "4.1.2"
+version = "4.2.0"
 edition = "2024"
 
 [dependencies]
@@ -23,7 +23,7 @@ winreg = "0.56.0"
 rustflags = ["-C", "target-feature=+crt-static"]
 
 [profile.release]
-opt-level = 3
+opt-level = "z"
 lto = true
 codegen-units = 1
 panic = "abort"
