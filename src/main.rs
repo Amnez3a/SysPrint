@@ -69,6 +69,7 @@ fn main() {
             cfg.map(|c| c.hide_fetch_info),
             config_stronger,
         ),
+        show_sysprint_start_time: decide(args.show_sysprint_start_time, cfg.map(|c| c.show_sysprint_start_time), config_stronger),
     };
 
     let info = SystemInfo::collect(opts);

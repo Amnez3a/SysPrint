@@ -5,8 +5,9 @@ use colored::Colorize;
 use std::env;
 use std::fmt::Write;
 use std::fs;
+use std::time::Instant;
 
-pub fn other_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> ColoredString) {
+pub fn other_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> ColoredString, start_time: Instant) {
     if !opts.other {
         return;
     }
@@ -16,17 +17,18 @@ pub fn other_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Colore
     }
 
     de_check(buf, c);
-    if !opts.hide_fetch_info{
-        sysprint_info(buf, c);
+
+    if !opts.compact_mode {
+        wm_check(buf, c);
+        terminal_info(buf, c);
+        get_shell(buf, c);
+        battery_info(buf, c);
+        system_time(buf, c);
     }
-    if opts.compact_mode {
-        return;
+
+    if !opts.hide_fetch_info {
+        sysprint_info(buf, c, start_time, opts);
     }
-    wm_check(buf, c);
-    terminal_info(buf, c);
-    get_shell(buf, c);
-    battery_info(buf, c);
-    system_time(buf, c);
 }
 
 fn de_check(buf: &mut String, c: fn(&str) -> ColoredString) {
@@ -213,11 +215,19 @@ fn system_time(buf: &mut String, c: fn(&str) -> ColoredString) {
     let _ = writeln!(buf, "{}: {}", c("Locale Time"), now.format("%H:%M"));
 }
 
-fn sysprint_info(buf: &mut String, c: fn(&str) -> ColoredString) {
+fn sysprint_info(buf: &mut String, c: fn(&str) -> ColoredString, start_time: Instant, opts: &DisplayOptions, ) {
+    let time_str = if opts.show_sysprint_start_time {
+        let ms = start_time.elapsed().as_secs_f64() * 1000.0;
+        format!(" ({:.2} ms)", ms)
+    } else {
+        String::new()
+    };
+
     let _ = writeln!(
         buf,
-        "{}: SysPrint v{}",
-        c("Fetch"),
-        env!("CARGO_PKG_VERSION")
+        "{}: SysPrint v{}{}",
+        c("Fetch "),
+        env!("CARGO_PKG_VERSION"),
+        time_str
     );
 }

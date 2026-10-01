@@ -47,4 +47,6 @@ pub struct Arguments {
     #[arg(long = "hide-fetch-info")]
     pub hide_fetch_info: bool,
 
+    #[arg(long = "show-sysprint-start-time")]
+    pub show_sysprint_start_time: bool,
 }

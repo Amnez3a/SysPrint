@@ -27,6 +27,7 @@ pub struct Config {
     pub fast_mode: bool,
     pub compact_mode: bool,
     pub hide_fetch_info: bool,
+    pub show_sysprint_start_time: bool,
 }
 
 impl Default for Config {
@@ -43,6 +44,7 @@ impl Default for Config {
             fast_mode: false,
             compact_mode: false,
             hide_fetch_info: false,
+            show_sysprint_start_time: true,
         }
     }
 }

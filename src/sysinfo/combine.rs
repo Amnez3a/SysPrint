@@ -18,6 +18,7 @@ pub struct DisplayOptions {
     pub compact_mode: bool,
     pub fast_mode: bool,
     pub hide_fetch_info: bool,
+    pub show_sysprint_start_time: bool,
 }
 
 impl Default for DisplayOptions {
@@ -33,6 +34,7 @@ impl Default for DisplayOptions {
             compact_mode: false,
             fast_mode: false,
             hide_fetch_info: false,
+            show_sysprint_start_time: true,
         }
     }
 }
@@ -44,6 +46,7 @@ pub struct SystemInfo {
 
 impl SystemInfo {
     pub fn collect(opts: DisplayOptions) -> Self {
+        let start_time = std::time::Instant::now();
         let mut buffer = String::with_capacity(2048);
         let (_, _, c) = crate::logos::get_logo(opts.mini_logo_mode);
 
@@ -58,7 +61,7 @@ impl SystemInfo {
             cpu_info(&opts, &mut buffer, &_sys, c);
             get_gpu_info(&opts, &mut buffer, opts.fast_mode, c);
             memory_info(&opts, &mut buffer, &_sys, c);
-            other_info(&opts, &mut buffer, c);
+            other_info(&opts, &mut buffer, c, start_time);
 
             return Self {
                 buffer,
@@ -86,7 +89,7 @@ impl SystemInfo {
             memory_info(&opts, &mut buffer, &_sys, c);
         }
         if opts.other {
-            other_info(&opts, &mut buffer, c);
+            other_info(&opts, &mut buffer, c, start_time);
         }
         if opts.disks {
             disk_info(&opts, &mut buffer, c);
