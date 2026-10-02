@@ -8,7 +8,7 @@ use std::fs;
 use std::time::Instant;
 
 pub fn other_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> ColoredString, start_time: Instant) {
-    if !opts.other {
+    if !opts.other.enabled {
         return;
     }
 
@@ -16,18 +16,29 @@ pub fn other_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Colore
         let _ = writeln!(buf, "{}", "--- Other INFO ---".bold().cyan());
     }
 
-    de_check(buf, c);
-
-    if !opts.compact_mode {
-        wm_check(buf, c);
-        terminal_info(buf, c);
-        get_shell(buf, c);
-        battery_info(buf, c);
-        system_time(buf, c);
+    if opts.other.de{
+        de_check(buf, c);
     }
-
     if !opts.hide_fetch_info {
         sysprint_info(buf, c, start_time, opts);
+    }
+    if opts.compact_mode {
+        return;
+    }
+    if opts.other.wm{
+        wm_check(buf, c);
+    }
+    if opts.other.terminal{
+        terminal_info(buf, c);
+    }
+    if opts.other.shell{
+        get_shell(buf, c);
+    }
+    if opts.other.battery{
+        battery_info(buf, c);
+    }
+    if opts.other.locale_time{
+        system_time(buf, c);
     }
 }
 

@@ -4,13 +4,13 @@ mod parser;
 mod print;
 mod sysinfo;
 
+use crate::config::Config;
 use crate::sysinfo::combine::DisplayOptions;
 use crate::sysinfo::combine::SystemInfo;
 use clap::Parser;
 use parser::Arguments;
 
 fn main() {
-    // For fucking Windows CMD
     #[cfg(windows)]
     let _ = colored::control::set_virtual_terminal(true);
 
@@ -24,52 +24,50 @@ fn main() {
         return;
     }
 
-    // Config is optional; a broken file only warns and falls back to CLI args.
     let cfg = match config::load() {
-        Ok(cfg) => cfg,
+        Ok(cfg) => cfg.unwrap_or_default(),
         Err(e) => {
             eprintln!("warning: {e}, ignoring config");
-            None
+            Config::default()
         }
     };
 
-    let config_stronger = cfg.map(|c| c.config_stronger).unwrap_or(false);
+    let config_stronger = cfg.config_stronger;
+
+    let mut system_cfg = cfg.system;
+    system_cfg.enabled = decide(args.hide_system, system_cfg.enabled, config_stronger);
+
+    let mut cpu_cfg = cfg.cpu;
+    cpu_cfg.enabled = decide(args.hide_cpu, cpu_cfg.enabled, config_stronger);
+
+    let mut gpu_cfg = cfg.gpu;
+    gpu_cfg.enabled = decide(args.hide_gpu, gpu_cfg.enabled, config_stronger);
+
+    let mut memory_cfg = cfg.memory;
+    memory_cfg.enabled = decide(args.hide_memory, memory_cfg.enabled, config_stronger);
+
+    let mut other_cfg = cfg.other;
+    other_cfg.enabled = decide(args.hide_other, other_cfg.enabled, config_stronger);
+
+    let mut disks_cfg = cfg.disks;
+    disks_cfg.enabled = decide(args.hide_disks, disks_cfg.enabled, config_stronger);
+
     let opts = DisplayOptions {
-        system: decide(
-            args.hide_system,
-            cfg.map(|c| c.show_system_info),
+        system: system_cfg,
+        cpu: cpu_cfg,
+        gpu: gpu_cfg,
+        memory: memory_cfg,
+        other: other_cfg,
+        disks: disks_cfg,
+        mini_logo_mode: decide_bool(args.mini, cfg.mini_logo_mode, config_stronger),
+        fast_mode: decide_bool(args.fast_mode, cfg.fast_mode, config_stronger),
+        compact_mode: decide_bool(args.compact_mode, cfg.compact_mode, config_stronger),
+        hide_fetch_info: decide_bool(args.hide_fetch_info, cfg.hide_fetch_info, config_stronger),
+        show_sysprint_start_time: decide_bool(
+            args.show_sysprint_start_time,
+            cfg.show_sysprint_start_time,
             config_stronger,
         ),
-        cpu: decide(args.hide_cpu, cfg.map(|c| c.show_cpu_info), config_stronger),
-        memory: decide(
-            args.hide_memory,
-            cfg.map(|c| c.show_memory_info),
-            config_stronger,
-        ),
-        disks: decide(
-            args.hide_disks,
-            cfg.map(|c| c.show_disks_info),
-            config_stronger,
-        ),
-        other: decide(
-            args.hide_other,
-            cfg.map(|c| c.show_other_info),
-            config_stronger,
-        ),
-        gpu: decide(args.hide_gpu, cfg.map(|c| c.show_gpu_info), config_stronger),
-        mini_logo_mode: decide(args.mini, cfg.map(|c| c.mini_logo_mode), config_stronger),
-        fast_mode: decide(args.fast_mode, cfg.map(|c| c.fast_mode), config_stronger),
-        compact_mode: decide(
-            args.compact_mode,
-            cfg.map(|c| c.compact_mode),
-            config_stronger,
-        ),
-        hide_fetch_info: decide(
-            args.hide_fetch_info,
-            cfg.map(|c| c.hide_fetch_info),
-            config_stronger,
-        ),
-        show_sysprint_start_time: decide(args.show_sysprint_start_time, cfg.map(|c| c.show_sysprint_start_time), config_stronger),
     };
 
     let info = SystemInfo::collect(opts);
@@ -83,12 +81,22 @@ fn main() {
     }
 }
 
-fn decide(flag_hides: bool, config: Option<bool>, config_stronger: bool) -> bool {
+fn decide(hide_flag: bool, config_val: bool, config_stronger: bool) -> bool {
     if config_stronger {
-        config.unwrap_or(true)
-    } else if flag_hides {
+        config_val
+    } else if hide_flag {
         false
     } else {
-        config.unwrap_or(true)
+        config_val
+    }
+}
+
+fn decide_bool(flag: bool, config_val: bool, config_stronger: bool) -> bool {
+    if config_stronger {
+        config_val
+    } else if flag {
+        true
+    } else {
+        config_val
     }
 }

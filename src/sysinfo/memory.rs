@@ -11,7 +11,7 @@ pub fn memory_info(
     sys: &System,
     c: fn(&str) -> ColoredString,
 ) {
-    if !opts.memory {
+    if !opts.memory.enabled {
         return;
     }
 

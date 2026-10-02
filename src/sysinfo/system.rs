@@ -24,23 +24,38 @@ fn format_uptime(seconds: u64) -> String {
 
 // --- SYSTEM INFO ---
 pub fn system_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> ColoredString) {
-    if !opts.system {
+    if !opts.system.enabled {
         return;
     }
 
     if !opts.compact_mode {
         let _ = writeln!(buf, "{}", "--- System INFO ---".bold().cyan());
     }
+    if opts.system.os_name {
+        os_name(buf, c);
 
-    os_name(buf, c);
-    check_kernel(buf, c);
+    }
+    if opts.system.kernel{
+        check_kernel(buf, c);
+    }
     if opts.compact_mode{
         return;
     }
-    os_version(buf, c);
-    init_info(buf, c);
-    host(buf, c);
-    user_info(buf, c);
+    if opts.system.os_version{
+        os_version(buf, c);
+    }
+    if opts.system.init{
+        init_info(buf, c);
+    }
+    if opts.system.host{
+        host(buf, c);
+    }
+    if opts.system.user{
+        user_info(buf, c);
+    }
+    if opts.system.uptime{
+        let _ = writeln!(buf, "{}: {}", c("Uptime"), format_uptime(System::uptime()));
+    }
 
     // OS_name
     fn os_name(buf: &mut String, c: fn(&str) -> ColoredString) {
@@ -128,7 +143,4 @@ pub fn system_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Color
 
         let _ = writeln!(buf, "{}: {}", c("User"), username);
     }
-
-    //Uptime
-    let _ = writeln!(buf, "{}: {}", c("Uptime"), format_uptime(System::uptime()));
 }

@@ -4,7 +4,7 @@ use std::fmt::Write;
 use std::process::Command;
 
 pub fn get_gpu_info(opts: &DisplayOptions, buf: &mut String, fast_mode: bool, c: fn(&str) -> ColoredString) {
-    if !opts.gpu {
+    if !opts.gpu.enabled {
         return;
     }
 
@@ -14,11 +14,6 @@ pub fn get_gpu_info(opts: &DisplayOptions, buf: &mut String, fast_mode: bool, c:
 
     #[cfg(target_os = "linux")]
     if get_nvidia_fast_info(opts, buf, fast_mode, c) {
-        return;
-    }
-
-    #[cfg(windows)]
-    if get_windows_gpu_info(opts, buf, fast_mode, c) {
         return;
     }
 
@@ -145,8 +140,12 @@ pub fn get_nvidia_fast_info(
                     let used_mb: f64 = parts[0].parse().unwrap_or(0.0);
                     let total_mb: f64 = parts[1].parse().unwrap_or(0.0);
                     let temp = parts[2];
-                    let _ = writeln!(buf, "{}: {:.2} GB / {:.2} GB", c("VRAM"), used_mb / 1024.0, total_mb / 1024.0);
-                    let _ = writeln!(buf, "{}: {}°C", c("GPU Temp"), temp);
+                    if opts.gpu.vram {
+                        let _ = writeln!(buf, "{}: {:.2} GB / {:.2} GB", c("VRAM"), used_mb / 1024.0, total_mb / 1024.0);
+                    }
+                    if opts.gpu.temp {
+                        let _ = writeln!(buf, "{}: {}°C", c("GPU Temp"), temp);
+                    }
                 }
             }
         }
@@ -202,14 +201,18 @@ fn get_nvidia_info(
         let mem_used: f64 = parts[2].parse().unwrap_or(0.0) / 1024.0;
         let temp = parts[3];
 
-        let _ = writeln!(
-            buf,
-            "{}: {:.2} GB / {:.2} GB",
-            c("VRAM"),
-            mem_used,
-            mem_total
-        );
-        let _ = writeln!(buf, "{}: {}°C", c("GPU Temp"), temp);
+        if opts.gpu.vram {
+            let _ = writeln!(
+                buf,
+                "{}: {:.2} GB / {:.2} GB",
+                c("VRAM"),
+                mem_used,
+                mem_total
+            );
+        }
+        if opts.gpu.temp {
+            let _ = writeln!(buf, "{}: {}°C", c("GPU Temp"), temp);
+        }
     }
 
     true
@@ -247,7 +250,7 @@ fn get_macos_gpu_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> Co
     }
 
     let _ = writeln!(buf, "{}: {}", c("GPU"), clean_gpu_name(&gpu_name));
-    if !opts.compact_mode && !vram.is_empty() {
+    if !opts.compact_mode && opts.gpu.vram {
         let _ = writeln!(buf, "{}: {}", c("VRAM"), vram);
     }
 
@@ -315,7 +318,7 @@ fn get_linux_sysfs_gpu(
         let vram_used_path = device_path.join("mem_info_vram_used");
         let vram_total_path = device_path.join("mem_info_vram_total");
 
-        if vram_used_path.exists() && vram_total_path.exists() {
+        if opts.gpu.vram && vram_used_path.exists() && vram_total_path.exists() {
             let used_bytes: f64 = fs::read_to_string(vram_used_path)
                 .unwrap_or_default()
                 .trim()
@@ -334,15 +337,17 @@ fn get_linux_sysfs_gpu(
             }
         }
 
-        let hwmon_dir = device_path.join("hwmon");
-        if let Ok(hwmon_entries) = fs::read_dir(hwmon_dir) {
-            for hwmon in hwmon_entries.flatten() {
-                let temp_path = hwmon.path().join("temp1_input");
-                if temp_path.exists() {
-                    if let Ok(temp_raw) = fs::read_to_string(temp_path) {
-                        if let Ok(temp_mc) = temp_raw.trim().parse::<f64>() {
-                            let _ = writeln!(buf, "{}: {:.0}°C", c("GPU Temp"), temp_mc / 1000.0);
-                            break;
+        if opts.gpu.temp {
+            let hwmon_dir = device_path.join("hwmon");
+            if let Ok(hwmon_entries) = fs::read_dir(hwmon_dir) {
+                for hwmon in hwmon_entries.flatten() {
+                    let temp_path = hwmon.path().join("temp1_input");
+                    if temp_path.exists() {
+                        if let Ok(temp_raw) = fs::read_to_string(temp_path) {
+                            if let Ok(temp_mc) = temp_raw.trim().parse::<f64>() {
+                                let _ = writeln!(buf, "{}: {:.0}°C", c("GPU Temp"), temp_mc / 1000.0);
+                                break;
+                            }
                         }
                     }
                 }
@@ -389,15 +394,17 @@ fn get_windows_gpu_info(
                     return true;
                 }
 
-                if let Ok(mem_bytes) = gpu_sub_key.get_value::<u64, _>("HardwareInformation.MemorySize") {
-                    let gb = mem_bytes as f64 / 1024.0 / 1024.0 / 1024.0;
-                    if gb > 0.0 {
-                        let _ = writeln!(buf, "{}: {:.2} GB", c("VRAM"), gb);
-                    }
-                } else if let Ok(mem_bytes) = gpu_sub_key.get_value::<u32, _>("HardwareInformation.MemorySize") {
-                    let gb = mem_bytes as f64 / 1024.0 / 1024.0 / 1024.0;
-                    if gb > 0.0 {
-                        let _ = writeln!(buf, "{}: {:.2} GB", c("VRAM"), gb);
+                if opts.gpu.vram {
+                    if let Ok(mem_bytes) = gpu_sub_key.get_value::<u64, _>("HardwareInformation.MemorySize") {
+                        let gb = mem_bytes as f64 / 1024.0 / 1024.0 / 1024.0;
+                        if gb > 0.0 {
+                            let _ = writeln!(buf, "{}: {:.2} GB", c("VRAM"), gb);
+                        }
+                    } else if let Ok(mem_bytes) = gpu_sub_key.get_value::<u32, _>("HardwareInformation.MemorySize") {
+                        let gb = mem_bytes as f64 / 1024.0 / 1024.0 / 1024.0;
+                        if gb > 0.0 {
+                            let _ = writeln!(buf, "{}: {:.2} GB", c("VRAM"), gb);
+                        }
                     }
                 }
 
@@ -442,16 +449,18 @@ fn get_freebsd_gpu_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> 
         return true;
     }
 
-    if let Ok(sysctl_out) = Command::new("sysctl")
-        .arg("-n")
-        .arg("dev.amdtemp.0.core0")
-        .output()
-    {
-        let temp_str = String::from_utf8_lossy(&sysctl_out.stdout)
-            .trim()
-            .to_string();
-        if !temp_str.is_empty() {
-            let _ = writeln!(buf, "{}: {}", c("GPU Temp"), temp_str);
+    if opts.gpu.temp {
+        if let Ok(sysctl_out) = Command::new("sysctl")
+            .arg("-n")
+            .arg("dev.amdtemp.0.core0")
+            .output()
+        {
+            let temp_str = String::from_utf8_lossy(&sysctl_out.stdout)
+                .trim()
+                .to_string();
+            if !temp_str.is_empty() {
+                let _ = writeln!(buf, "{}: {}", c("GPU Temp"), temp_str);
+            }
         }
     }
 
@@ -522,15 +531,17 @@ fn get_netbsd_gpu_info(opts: &DisplayOptions, buf: &mut String, c: fn(&str) -> C
         return true;
     }
 
-    if let Ok(env_out) = Command::new("envstat")
-        .args(["-s", "amdgpu:temperature"])
-        .output()
-    {
-        let env_text = String::from_utf8_lossy(&env_out.stdout);
-        if let Some(temp_line) = env_text.lines().find(|l| l.contains("degC")) {
-            let parts: Vec<&str> = temp_line.split_whitespace().collect();
-            if parts.len() >= 2 {
-                let _ = writeln!(buf, "{}: {}°C", c("GPU Temp"), parts[1]);
+    if opts.gpu.temp {
+        if let Ok(env_out) = Command::new("envstat")
+            .args(["-s", "amdgpu:temperature"])
+            .output()
+        {
+            let env_text = String::from_utf8_lossy(&env_out.stdout);
+            if let Some(temp_line) = env_text.lines().find(|l| l.contains("degC")) {
+                let parts: Vec<&str> = temp_line.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    let _ = writeln!(buf, "{}: {}°C", c("GPU Temp"), parts[1]);
+                }
             }
         }
     }

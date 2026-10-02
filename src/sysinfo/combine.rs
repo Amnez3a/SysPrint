@@ -1,3 +1,6 @@
+use crate::config::{
+    CpuConfig, DisksConfig, GpuConfig, MemoryConfig, OtherConfig, SystemConfig,
+};
 use crate::sysinfo::cpu::cpu_info;
 use crate::sysinfo::disks::disk_info;
 use crate::sysinfo::gpu::get_gpu_info;
@@ -6,14 +9,15 @@ use crate::sysinfo::other::other_info;
 use crate::sysinfo::system::system_info;
 use sysinfo::{CpuRefreshKind, MemoryRefreshKind, RefreshKind, System};
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct DisplayOptions {
-    pub system: bool,
-    pub cpu: bool,
-    pub memory: bool,
-    pub disks: bool,
-    pub other: bool,
-    pub gpu: bool,
+    pub system: SystemConfig,
+    pub cpu: CpuConfig,
+    pub gpu: GpuConfig,
+    pub memory: MemoryConfig,
+    pub other: OtherConfig,
+    pub disks: DisksConfig,
+
     pub mini_logo_mode: bool,
     pub compact_mode: bool,
     pub fast_mode: bool,
@@ -24,12 +28,12 @@ pub struct DisplayOptions {
 impl Default for DisplayOptions {
     fn default() -> Self {
         Self {
-            system: true,
-            cpu: true,
-            memory: true,
-            disks: true,
-            other: true,
-            gpu: true,
+            system: SystemConfig::default(),
+            cpu: CpuConfig::default(),
+            gpu: GpuConfig::default(),
+            memory: MemoryConfig::default(),
+            other: OtherConfig::default(),
+            disks: DisksConfig::default(),
             mini_logo_mode: false,
             compact_mode: false,
             fast_mode: false,
@@ -50,13 +54,13 @@ impl SystemInfo {
         let mut buffer = String::with_capacity(2048);
         let (_, _, c) = crate::logos::get_logo(opts.mini_logo_mode);
 
-        if opts.compact_mode {
-            let _sys = System::new_with_specifics(
-                RefreshKind::nothing()
-                    .with_cpu(CpuRefreshKind::everything())
-                    .with_memory(MemoryRefreshKind::everything()),
-            );
+        let _sys = System::new_with_specifics(
+            RefreshKind::nothing()
+                .with_cpu(CpuRefreshKind::everything())
+                .with_memory(MemoryRefreshKind::everything()),
+        );
 
+        if opts.compact_mode {
             system_info(&opts, &mut buffer, c);
             cpu_info(&opts, &mut buffer, &_sys, c);
             get_gpu_info(&opts, &mut buffer, opts.fast_mode, c);
@@ -70,28 +74,22 @@ impl SystemInfo {
         }
 
         // --- STANDARD / FULL MODE BRANCH ---
-        let _sys = System::new_with_specifics(
-            RefreshKind::nothing()
-                .with_cpu(CpuRefreshKind::everything())
-                .with_memory(MemoryRefreshKind::everything()),
-        );
-
-        if opts.system {
+        if opts.system.enabled {
             system_info(&opts, &mut buffer, c);
         }
-        if opts.cpu {
+        if opts.cpu.enabled {
             cpu_info(&opts, &mut buffer, &_sys, c);
         }
-        if opts.gpu {
+        if opts.gpu.enabled {
             get_gpu_info(&opts, &mut buffer, opts.fast_mode, c);
         }
-        if opts.memory {
+        if opts.memory.enabled {
             memory_info(&opts, &mut buffer, &_sys, c);
         }
-        if opts.other {
+        if opts.other.enabled {
             other_info(&opts, &mut buffer, c, start_time);
         }
-        if opts.disks {
+        if opts.disks.enabled {
             disk_info(&opts, &mut buffer, c);
         }
 

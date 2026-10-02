@@ -15,21 +15,21 @@ pub struct Arguments {
     #[arg(long = "hide-cpu")]
     pub hide_cpu: bool,
 
+    /// Hide GPU section
+    #[arg(long = "hide-gpu")]
+    pub hide_gpu: bool,
+
     /// Hide Memory section
     #[arg(long = "hide-memory")]
     pub hide_memory: bool,
-
-    /// Hide Disks section
-    #[arg(long = "hide-disks")]
-    pub hide_disks: bool,
 
     /// Hide Other section
     #[arg(long = "hide-other")]
     pub hide_other: bool,
 
-    /// Hide GPU section
-    #[arg(long = "hide-gpu")]
-    pub hide_gpu: bool,
+    /// Hide Disks section
+    #[arg(long = "hide-disks")]
+    pub hide_disks: bool,
 
     /// Mini mode
     #[arg(short = 'm', long = "mini")]

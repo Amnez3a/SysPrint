@@ -6,7 +6,7 @@ use crate::sysinfo::combine::DisplayOptions;
 
 // --- DISKS INFO ---
 pub fn disk_info(opts: &DisplayOptions, buf: &mut String, c :fn(&str) -> ColoredString) {
-    if !opts.disks {
+    if !opts.disks.enabled {
         return;
     }
 
